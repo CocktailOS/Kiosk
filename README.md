@@ -28,7 +28,7 @@ Die Startseite zeigt bis zu sechs Cocktails in zwei Reihen. Weitere Cocktails la
 
 ### Pumpenverwaltung
 
-Die Einstellungen bündeln technische Details und Aktionen übersichtlich in einer Zeile. Status, GPIO-Pin, Förderrate und zugeordnete Zutat sind sofort erkennbar.
+Die Pumpenverwaltung zeigt Status, GPIO-Pin, Förderrate und zugeordnete Zutat auf einen Blick. Reinigungsmodus und das Füllen der Schläuche sind direkt erreichbar.
 
 ![Pumpenverwaltung](docs/screenshots/einstellungen-pumpen.png)
 
