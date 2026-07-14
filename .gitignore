@@ -1,0 +1,10 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+CocktailOS.Kiosk/data/*.db
+CocktailOS.Kiosk/data/*.db-shm
+CocktailOS.Kiosk/data/*.db-wal
+CocktailOS.Kiosk/wwwroot/uploads/*
+.idea

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 900" role="img" aria-labelledby="title">
+  <title id="title">Bay Breeze mit Cranberry und Ananas</title>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#142d45"/><stop offset="1" stop-color="#301b3e"/></linearGradient>
+    <linearGradient id="drink" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f4b84f"/><stop offset=".5" stop-color="#e45b63"/><stop offset="1" stop-color="#9e284e"/></linearGradient>
+  </defs>
+  <rect width="800" height="900" fill="url(#background)"/>
+  <circle cx="670" cy="170" r="190" fill="#f1b34f" opacity=".14"/>
+  <circle cx="120" cy="740" r="230" fill="#e0446d" opacity=".13"/>
+  <path d="M245 175h310l-34 548c-4 66-59 117-125 117s-121-51-125-117z" fill="#eef6ff" opacity=".14" stroke="#eff7ff" stroke-width="12"/>
+  <path d="M274 325h252l-25 391c-3 52-46 93-98 93h-6c-52 0-95-41-98-93z" fill="url(#drink)"/>
+  <ellipse cx="400" cy="327" rx="126" ry="23" fill="#f5bd59"/>
+  <path d="M476 210c70-20 126-2 165 52-67 14-121-3-165-52z" fill="#58a85f"/>
+  <path d="M500 223c43 4 83 16 124 34" fill="none" stroke="#a8d16f" stroke-width="7"/>
+  <path d="M498 272 577 191 637 250 556 330z" fill="#f4c64d" stroke="#ffe18b" stroke-width="7"/>
+</svg>

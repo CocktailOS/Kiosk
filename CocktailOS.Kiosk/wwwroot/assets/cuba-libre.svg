@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 900" role="img" aria-labelledby="title">
+  <title id="title">Cuba Libre im hohen Glas</title>
+  <defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2b163a"/><stop offset="1" stop-color="#0b2440"/></linearGradient><linearGradient id="d" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#d88536"/><stop offset="1" stop-color="#35110c"/></linearGradient></defs>
+  <rect width="800" height="900" fill="url(#b)"/><circle cx="140" cy="150" r="180" fill="#ff6b42" opacity=".2"/><circle cx="700" cy="720" r="240" fill="#3868ff" opacity=".16"/>
+  <path d="M240 170h320l-35 560c-4 62-55 110-117 110h-16c-62 0-113-48-117-110z" fill="#e8f2ff" opacity=".15" stroke="#eff7ff" stroke-width="12"/>
+  <path d="M269 335h262l-25 390c-3 48-43 85-91 85h-30c-48 0-88-37-91-85z" fill="url(#d)"/>
+  <ellipse cx="400" cy="337" rx="131" ry="24" fill="#eba04c"/><g fill="#d7f0ff" opacity=".48"><rect x="310" y="270" width="84" height="84" rx="14" transform="rotate(-12 352 312)"/><rect x="407" y="252" width="88" height="88" rx="14" transform="rotate(13 451 296)"/></g>
+  <path d="M518 240c-64-46-125-44-164 8 66 19 111 13 164-8z" fill="#71c44e"/><path d="M513 241c-54-5-102 2-151 12" fill="none" stroke="#d8ef65" stroke-width="6"/>
+</svg>

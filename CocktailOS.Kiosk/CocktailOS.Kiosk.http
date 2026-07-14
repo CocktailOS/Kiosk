@@ -1,0 +1,6 @@
+@CocktailOS.Kiosk_HostAddress = http://localhost:5276
+
+GET {{CocktailOS.Kiosk_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

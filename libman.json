@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "defaultProvider": "unpkg",
+  "libraries": [
+    {
+      "provider": "cdnjs",
+      "library": "gsap@3.13.0",
+      "destination": "CocktailOS.Kiosk\\wwwroot\\vendor\\gsap",
+      "files": [
+        "gsap.min.js"
+      ]
+    }
+  ]
+}

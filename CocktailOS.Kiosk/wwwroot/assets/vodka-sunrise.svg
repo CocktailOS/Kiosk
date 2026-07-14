@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 900" role="img" aria-labelledby="title">
+  <title id="title">Vodka Sunrise mit Orange und Grenadine</title>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#3b2030"/><stop offset="1" stop-color="#172b44"/></linearGradient>
+    <linearGradient id="drink" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffd35a"/><stop offset=".58" stop-color="#f58b3d"/><stop offset="1" stop-color="#c52f53"/></linearGradient>
+  </defs>
+  <rect width="800" height="900" fill="url(#background)"/>
+  <circle cx="135" cy="140" r="205" fill="#f0a743" opacity=".14"/>
+  <circle cx="700" cy="730" r="235" fill="#d33b61" opacity=".12"/>
+  <path d="M250 170h300l-32 552c-4 66-58 118-124 118s-120-52-124-118z" fill="#eef6ff" opacity=".14" stroke="#eff7ff" stroke-width="12"/>
+  <path d="M279 310h242l-23 405c-3 53-47 94-100 94s-97-41-100-94z" fill="url(#drink)"/>
+  <ellipse cx="400" cy="312" rx="121" ry="22" fill="#ffd868"/>
+  <circle cx="521" cy="245" r="74" fill="#f6ad3f" stroke="#ffd77e" stroke-width="8"/>
+  <circle cx="521" cy="245" r="48" fill="none" stroke="#ffe5a4" stroke-width="5" stroke-dasharray="5 11"/>
+  <path d="M326 211c70-17 125-2 164 45-65 13-117-2-164-45z" fill="#4fa764"/>
+</svg>

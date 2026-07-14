@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  RUNTIME_IDENTIFIER: linux-arm64
+  PRERELEASE: true
+
+jobs:
+  release:
+    name: Publish self-contained release
+    runs-on: ubuntu-latest
+
+    env:
+      PROJECT_PATH: CocktailOS.Kiosk/CocktailOS.Kiosk.csproj
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install Nerdbank.GitVersioning tool
+        run: |
+          dotnet tool install --global nbgv --version 3.10.91
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Read Nerdbank version
+        id: version
+        run: |
+          version="$(nbgv get-version -v NuGetPackageVersion)"
+          semver="$(nbgv get-version -v SemVer2)"
+          tag="v${version}"
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "semver=${semver}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Nerdbank version"
+            echo ""
+            echo "- NuGetPackageVersion: \`${version}\`"
+            echo "- SemVer2: \`${semver}\`"
+            echo "- Release tag: \`${tag}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore
+        run: dotnet restore "$PROJECT_PATH" -r "$RUNTIME_IDENTIFIER"
+
+      - name: Publish
+        run: |
+          dotnet publish "$PROJECT_PATH" \
+            --configuration Release \
+            --no-restore \
+            --runtime "$RUNTIME_IDENTIFIER" \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:EnableCompressionInSingleFile=true \
+            -p:ContinuousIntegrationBuild=true \
+            -p:DebugType=embedded \
+            -o "artifacts/publish"
+
+      - name: Package release assets
+        id: package
+        run: |
+          asset_base="CocktailOS.Kiosk-${{ steps.version.outputs.version }}-${RUNTIME_IDENTIFIER}"
+          archive="artifacts/${asset_base}.tar.gz"
+          checksum_file="${archive}.sha256"
+
+          tar -C artifacts/publish -czf "$archive" .
+          sha256sum "$archive" > "$checksum_file"
+
+          echo "archive=${archive}" >> "$GITHUB_OUTPUT"
+          echo "checksum=${checksum_file}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure release tag is new
+        run: |
+          if git ls-remote --exit-code --tags origin "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "Tag ${{ steps.version.outputs.tag }} already exists. Bump version.json or run from a newer Nerdbank version."
+            exit 1
+          fi
+
+      - name: Create and push release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.version }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes_file="$(mktemp)"
+          cat > "$notes_file" <<EOF
+          Self-contained CocktailOS Kiosk release for Raspberry Pi.
+
+          Version source: Nerdbank.GitVersioning
+          Runtime: ${RUNTIME_IDENTIFIER}
+          EOF
+
+          release_flags=()
+          if [ "$PRERELEASE" = "true" ]; then
+            release_flags+=(--prerelease)
+          fi
+
+          gh release create "${{ steps.version.outputs.tag }}" \
+            "${{ steps.package.outputs.archive }}" \
+            "${{ steps.package.outputs.checksum }}" \
+            --title "CocktailOS Kiosk ${{ steps.version.outputs.version }}" \
+            --notes-file "$notes_file" \
+            "${release_flags[@]}"

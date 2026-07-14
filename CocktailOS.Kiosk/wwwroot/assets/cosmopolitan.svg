@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 900" role="img" aria-labelledby="title">
+  <title id="title">Cosmopolitan in einer Cocktailschale</title>
+  <defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#321735"/><stop offset="1" stop-color="#112641"/></linearGradient><linearGradient id="d" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff7291"/><stop offset="1" stop-color="#bd235b"/></linearGradient></defs>
+  <rect width="800" height="900" fill="url(#b)"/><circle cx="90" cy="160" r="210" fill="#e74279" opacity=".18"/><circle cx="710" cy="690" r="230" fill="#456fff" opacity=".13"/>
+  <path d="M165 220h470L430 530v210h120v40H250v-40h120V530z" fill="#f1f7ff" opacity=".13" stroke="#f4f8ff" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M197 260h406L430 506h-60z" fill="url(#d)"/><ellipse cx="400" cy="259" rx="202" ry="26" fill="#ff91a7"/>
+  <path d="M477 187c70 5 110 35 128 88-65-6-105-35-128-88z" fill="#f18c3f"/><path d="M492 199c48 14 81 34 104 67" fill="none" stroke="#ffd094" stroke-width="7"/>
+</svg>
