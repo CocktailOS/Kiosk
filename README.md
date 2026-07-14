@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | 
 
 ### Nur lokales Display
 
-Startet die Oberfläche auf dem angeschlossenen Bildschirm. Die API ist dabei nur lokal auf dem Raspberry Pi erreichbar.
+Startet die Oberfläche über Cage und Chromium auf dem angeschlossenen Bildschirm. Die API ist dabei nur lokal auf dem Raspberry Pi erreichbar.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --display
@@ -69,21 +69,13 @@ curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | 
 
 ### Display und Netzwerkzugriff
 
-Startet die Oberfläche auf dem Display und stellt die API zusätzlich im lokalen Netzwerk bereit.
+Startet die Oberfläche über Cage und Chromium auf dem Display und stellt die API zusätzlich im lokalen Netzwerk bereit.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --both
 ```
 
-### Reduziertes Leistungsprofil
-
-Für leistungsschwächere Raspberry-Pi-Modelle kann der Display- oder Kombimodus mit einem reduzierten Profil installiert werden:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --both --low-performance
-```
-
-`--low-performance` ist nur zusammen mit `--display` oder `--both` gültig. Nach einer Installation mit Display bitte einmal neu starten:
+Nach einer Installation mit Display bitte einmal neu starten:
 
 ```bash
 sudo reboot

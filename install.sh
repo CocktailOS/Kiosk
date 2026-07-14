@@ -12,7 +12,6 @@ KEEP_RELEASES="3"
 TAG=""
 INCLUDE_PRERELEASE="true"
 MODE=""
-LOW_PERFORMANCE=""
 ORIGINAL_ARGS=("$@")
 
 usage() {
@@ -25,9 +24,8 @@ Aufruf:
 
 Optionen:
   --headless          Nur die API im Netzwerk bereitstellen.
-  --display           Cage-Kiosk auf dem angeschlossenen Display starten.
-  --both              Cage-Kiosk starten und die API zusätzlich im Netzwerk bereitstellen.
-  --low-performance   Reduziertes Leistungsprofil für --display oder --both.
+  --display           Cage-/Chromium-Kiosk auf dem angeschlossenen Display starten.
+  --both              Cage-/Chromium-Kiosk starten und die API zusätzlich im Netzwerk bereitstellen.
   --tag TAG           Eine bestimmte Release-Version installieren.
   --stable            Vorabversionen beim automatischen Update ignorieren.
   -h, --help          Diese Hilfe anzeigen.
@@ -44,10 +42,6 @@ while [[ $# -gt 0 ]]; do
     --headless|--display|--both)
       [[ -z "$MODE" ]] || fail "Nur ein Betriebsmodus ist erlaubt."
       MODE="${1#--}"
-      shift
-      ;;
-    --low-performance)
-      LOW_PERFORMANCE="true"
       shift
       ;;
     --tag)
@@ -88,17 +82,17 @@ install_base_packages() {
 
 install_display_packages() {
   if { command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1; } \
-    && command -v xinit >/dev/null 2>&1 && command -v Xorg >/dev/null 2>&1; then
+    && command -v cage >/dev/null 2>&1; then
     return
   fi
 
-  command -v apt-get >/dev/null 2>&1 || fail "Der Displaymodus benötigt Chromium, Xorg und xinit. Installiere diese manuell oder verwende --headless."
-  log "Installiere Chromium, Xorg, xinit und Openbox für den Kiosk"
+  command -v apt-get >/dev/null 2>&1 || fail "Der Displaymodus benötigt Cage und Chromium. Installiere diese manuell oder verwende --headless."
+  log "Installiere Cage und Chromium für den Wayland-Kiosk"
   apt-get update
   if apt-cache show chromium >/dev/null 2>&1; then
-    apt-get install -y chromium xserver-xorg xinit openbox
+    apt-get install -y cage chromium
   else
-    apt-get install -y chromium-browser xserver-xorg xinit openbox
+    apt-get install -y cage chromium-browser
   fi
 }
 
@@ -131,7 +125,7 @@ configure_display() {
   set_boot_config_value "$boot_config" "hdmi_cvt" "1024 600 60 6 0 0 0"
   set_boot_config_value "$boot_config" "hdmi_drive" "1"
   sed -i -E '/^[[:space:]]*dtoverlay[[:space:]]*=[[:space:]]*vc4-(fkms|kms)-v3d([,[:space:]]|$)/d' "$boot_config"
-  printf '%s\n' 'dtoverlay=vc4-fkms-v3d' >> "$boot_config"
+  printf '%s\n' 'dtoverlay=vc4-kms-v3d' >> "$boot_config"
 }
 
 github_api() {
@@ -206,17 +200,6 @@ if [[ -z "$MODE" && -f "$ENV_FILE" ]]; then
 fi
 MODE="${MODE:-display}"
 
-if [[ "$MODE" == "headless" && "$LOW_PERFORMANCE" == "true" ]]; then
-  fail "--low-performance ist nur mit --display oder --both zulässig."
-fi
-if [[ -z "$LOW_PERFORMANCE" && -f "$ENV_FILE" ]] && grep -qx 'COCKTAILOS_LOW_PERFORMANCE=true' "$ENV_FILE"; then
-  LOW_PERFORMANCE="true"
-fi
-LOW_PERFORMANCE="${LOW_PERFORMANCE:-false}"
-if [[ "$MODE" == "headless" ]]; then
-  LOW_PERFORMANCE="false"
-fi
-
 if [[ "$MODE" == "display" || "$MODE" == "both" ]]; then
   install_display_packages
   configure_display
@@ -279,14 +262,7 @@ fi
 cat > "$ENV_FILE" <<ENVIRONMENT
 # Managed by CocktailOS Kiosk install.sh.
 COCKTAILOS_MODE=${MODE}
-COCKTAILOS_LOW_PERFORMANCE=${LOW_PERFORMANCE}
 ENVIRONMENT
-if [[ "$LOW_PERFORMANCE" == "true" ]]; then
-  cat >> "$ENV_FILE" <<'ENVIRONMENT'
-DOTNET_GCServer=0
-DOTNET_GCConserveMemory=9
-ENVIRONMENT
-fi
 chmod 0644 "$ENV_FILE"
 
 cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<SERVICE
@@ -310,27 +286,26 @@ Environment=ASPNETCORE_URLS=${APP_URL}
 WantedBy=multi-user.target
 SERVICE
 
-KIOSK_SERVICE_NAME="${SERVICE_NAME}-display"
+KIOSK_SERVICE_NAME="${SERVICE_NAME}-cage"
 KIOSK_SERVICE_FILE="/etc/systemd/system/${KIOSK_SERVICE_NAME}.service"
-KIOSK_SCRIPT="/usr/local/lib/cocktailos-kiosk/kiosk-session"
-LEGACY_CAGE_SERVICE_NAME="${SERVICE_NAME}-cage"
-LEGACY_CAGE_SERVICE_FILE="/etc/systemd/system/${LEGACY_CAGE_SERVICE_NAME}.service"
+KIOSK_SCRIPT="/usr/local/lib/cocktailos-kiosk/cage-session"
+LEGACY_DISPLAY_SERVICE_NAME="${SERVICE_NAME}-display"
+LEGACY_DISPLAY_SERVICE_FILE="/etc/systemd/system/${LEGACY_DISPLAY_SERVICE_NAME}.service"
 if [[ "$MODE" == "display" || "$MODE" == "both" ]]; then
   install -d -m 0755 /usr/local/lib/cocktailos-kiosk
-  install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "${DATA_ROOT}/browser"
-  install -d -m 0755 /etc/X11
-  cat > /etc/X11/Xwrapper.config <<'XWRAPPER'
-# Managed by CocktailOS Kiosk install.sh.
-allowed_users=anybody
-needs_root_rights=auto
-XWRAPPER
+  install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "${DATA_ROOT}/runtime" "${DATA_ROOT}/browser"
+  if [[ -f /etc/X11/Xwrapper.config ]] && grep -q 'Managed by CocktailOS Kiosk install.sh.' /etc/X11/Xwrapper.config; then
+    rm -f /etc/X11/Xwrapper.config
+  fi
   cat > "$KIOSK_SCRIPT" <<KIOSK
 #!/usr/bin/env bash
 set -Eeuo pipefail
 export HOME="${DATA_ROOT}/browser"
 export XDG_CONFIG_HOME="\${HOME}/.config"
 export XDG_CACHE_HOME="\${HOME}/.cache"
-mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}"
+export XDG_RUNTIME_DIR="${DATA_ROOT}/runtime"
+mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}" "\${XDG_RUNTIME_DIR}"
+chmod 0700 "\${XDG_RUNTIME_DIR}"
 
 if command -v chromium >/dev/null 2>&1; then
   chromium_bin="\$(command -v chromium)"
@@ -348,24 +323,23 @@ args=(
   --disable-session-crashed-bubble
   --disable-infobars
   --password-store=basic
+  --ozone-platform=wayland
+  --enable-features=UseOzonePlatform
+  --use-gl=egl
+  --enable-gpu-rasterization
+  --ignore-gpu-blocklist
   --disable-features=Translate,MediaRouter,OptimizationHints,OverscrollHistoryNavigation
   --disable-pinch
   --overscroll-history-navigation=0
 )
-if [[ "\${COCKTAILOS_LOW_PERFORMANCE:-false}" == "true" ]]; then
-  args+=(--disable-extensions --disable-component-update)
-fi
 
-openbox-session &
-openbox_pid=\$!
-trap 'kill "\${openbox_pid}" 2>/dev/null || true' EXIT
-exec "\${chromium_bin}" "\${args[@]}" "http://127.0.0.1:${PORT}"
+exec /usr/bin/cage -- "\${chromium_bin}" "\${args[@]}" "http://127.0.0.1:${PORT}"
 KIOSK
   chmod 0755 "$KIOSK_SCRIPT"
   chown root:root "$KIOSK_SCRIPT"
   cat > "$KIOSK_SERVICE_FILE" <<KIOSK_SERVICE
 [Unit]
-Description=CocktailOS Kiosk display
+Description=CocktailOS Kiosk on Cage
 After=${SERVICE_NAME}.service systemd-user-sessions.service
 Wants=${SERVICE_NAME}.service
 Conflicts=display-manager.service getty@tty1.service
@@ -382,7 +356,7 @@ StandardInput=tty
 TTYReset=yes
 TTYVHangup=yes
 TTYVTDisallocate=yes
-ExecStart=/usr/bin/xinit ${KIOSK_SCRIPT} -- :0 vt1 -keeptty -nolisten tcp -nocursor
+ExecStart=${KIOSK_SCRIPT}
 Restart=on-failure
 RestartSec=3
 
@@ -392,7 +366,7 @@ KIOSK_SERVICE
 else
   rm -f "$KIOSK_SERVICE_FILE"
 fi
-rm -f "$LEGACY_CAGE_SERVICE_FILE"
+rm -f "$LEGACY_DISPLAY_SERVICE_FILE"
 
 log "Aktiviere Dienste (${MODE})"
 systemctl daemon-reload
@@ -400,14 +374,14 @@ systemctl enable "$SERVICE_NAME"
 systemctl restart "$SERVICE_NAME"
 if [[ "$MODE" == "display" || "$MODE" == "both" ]]; then
   systemctl disable --now display-manager.service 2>/dev/null || true
-  systemctl stop "$LEGACY_CAGE_SERVICE_NAME" 2>/dev/null || true
-  systemctl disable --now "$LEGACY_CAGE_SERVICE_NAME" 2>/dev/null || true
+  systemctl stop "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
+  systemctl disable --now "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
   systemctl enable "$KIOSK_SERVICE_NAME"
   systemctl restart "$KIOSK_SERVICE_NAME"
 else
   systemctl disable --now "$KIOSK_SERVICE_NAME" 2>/dev/null || true
-  systemctl stop "$LEGACY_CAGE_SERVICE_NAME" 2>/dev/null || true
-  systemctl disable --now "$LEGACY_CAGE_SERVICE_NAME" 2>/dev/null || true
+  systemctl stop "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
+  systemctl disable --now "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
 fi
 
 find "${INSTALL_ROOT}/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
