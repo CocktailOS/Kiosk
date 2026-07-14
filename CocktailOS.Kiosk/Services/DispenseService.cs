@@ -432,22 +432,3 @@ public sealed class DispenseService(
             plan.Steps);
     }
 }
-
-public static class PumpOperationModes
-{
-    public const string Dispense = "dispense";
-    public const string Cleaning = "cleaning";
-    public const string Priming = "priming";
-}
-
-public static class DispenseStatuses
-{
-    public const string Idle = "idle";
-    public const string Running = "running";
-    public const string Completed = "completed";
-    public const string Stopped = "stopped";
-    public const string Failed = "failed";
-}
-
-public sealed class DispenseValidationException(string message) : Exception(message);
-public sealed class DispenseConflictException(string message) : Exception(message);
