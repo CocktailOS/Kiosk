@@ -12,6 +12,7 @@
         sizes: [],
         system: null,
         version: '',
+        update: null,
         activeTab: 'cocktails',
         editing: null,
         cocktailDraft: null,
@@ -35,7 +36,8 @@
         trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M9 3h6l1 4H8zM6 7l1 14h10l1-14M10 11v6M14 11v6"/></svg>',
         plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
         clean: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3S6.5 9.1 6.5 14a5.5 5.5 0 0 0 11 0C17.5 9.1 12 3 12 3Z"/><path d="M9.4 15.2a2.8 2.8 0 0 0 2.8 2.2"/></svg>',
-        prime: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 20V8.5a6 6 0 0 1 12 0V20"/><path d="M3 20h18M9 12h6M12 4v8"/><path d="M12 16v2"/></svg>'
+        prime: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 20V8.5a6 6 0 0 1 12 0V20"/><path d="M3 20h18M9 12h6M12 4v8"/><path d="M12 16v2"/></svg>',
+        download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>'
     };
 
     document.addEventListener('DOMContentLoaded', initialize);
@@ -65,6 +67,11 @@
             api('/api/cocktails'), api('/api/ingredients'), api('/api/pumps'), api('/api/sizes'), api('/api/system'), api('/api/app-info')
         ]);
         Object.assign(state, { cocktails, ingredients, pumps, sizes, system, version: appInfo.version });
+        try {
+            state.update = await api('/api/app-update');
+        } catch {
+            state.update = null;
+        }
         applyTheme(system.theme);
     }
 
@@ -286,7 +293,10 @@
         const nextTheme = currentTheme === 'Light' ? 'Dark' : 'Light';
         const themeIcon = nextTheme === 'Light' ? icons.sun : icons.moon;
         const themeLabel = nextTheme === 'Light' ? 'Hellen Modus aktivieren' : 'Dunklen Modus aktivieren';
-        tools.innerHTML = `<button type="button" class="theme-toggle" data-theme-toggle aria-label="${themeLabel}" title="${themeLabel}">${themeIcon}</button>`;
+        const updateButton = state.update?.isAvailable
+            ? `<button type="button" class="update-button" data-app-update aria-label="Update auf ${escapeHtml(state.update.latestVersion)} installieren" title="Update auf ${escapeHtml(state.update.latestVersion)} installieren">${icons.download}</button>`
+            : '';
+        tools.innerHTML = `${updateButton}<button type="button" class="theme-toggle" data-theme-toggle aria-label="${themeLabel}" title="${themeLabel}">${themeIcon}</button>`;
         version.before(tools);
         tools.append(version);
         app.querySelector('.back-home').addEventListener('click', () => { location.hash = '#/'; });
@@ -297,7 +307,37 @@
             renderSettings();
         }));
         app.querySelector('[data-theme-toggle]').addEventListener('click', () => setTheme(nextTheme));
+        app.querySelector('[data-app-update]')?.addEventListener('click', startApplicationUpdate);
         renderActiveSettingsTab();
+    }
+
+    async function startApplicationUpdate() {
+        const button = app.querySelector('[data-app-update]');
+        if (!button) return;
+        button.disabled = true;
+        button.classList.add('is-updating');
+        try {
+            const update = await api('/api/app-update', { method: 'POST' });
+            showToast(`Update auf ${update.version} wird installiert. Die App startet danach automatisch neu.`);
+            waitForUpdatedApplication();
+        } catch (error) {
+            button.disabled = false;
+            button.classList.remove('is-updating');
+            showToast(error.message, true);
+        }
+    }
+
+    async function waitForUpdatedApplication() {
+        try {
+            const appInfo = await api('/api/app-info');
+            if (appInfo.version !== state.version) {
+                location.reload();
+                return;
+            }
+        } catch {
+            // Der Dienst wird während des Updates kurz nicht erreichbar sein.
+        }
+        window.setTimeout(waitForUpdatedApplication, 3000);
     }
 
     async function setTheme(theme) {

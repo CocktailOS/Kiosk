@@ -310,9 +310,13 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .tab-button[aria-selected="true"] { border-color: rgba(124,58,237,.46); background: rgba(124,58,237,.16); color: #fff; }
 .settings-tools { flex: none; display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .settings-version { flex: none; color: var(--text-muted); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.theme-toggle { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-strong); color: var(--primary); }
-.theme-toggle:active { transform: scale(.96); }
-.theme-toggle svg { width: 20px; height: 20px; }
+.theme-toggle, .update-button { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-strong); color: var(--primary); }
+.update-button { position: relative; color: var(--accent); }
+.update-button::after { content: ""; position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border: 2px solid var(--surface-strong); border-radius: 999px; background: var(--success); }
+.theme-toggle:active, .update-button:active { transform: scale(.96); }
+.theme-toggle svg, .update-button svg { width: 20px; height: 20px; }
+.update-button.is-updating svg { animation: update-download 1s ease-in-out infinite; }
+@keyframes update-download { 50% { transform: translateY(3px); } }
 .settings-main { height: calc(100dvh - 68px); min-height: 430px; overflow: hidden; padding: 18px 28px 22px; }
 .settings-list-view { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; }
 .settings-list-header { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }

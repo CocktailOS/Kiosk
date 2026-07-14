@@ -15,6 +15,11 @@ var connectionString = builder.Configuration.GetConnectionString("CocktailOs")
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
+builder.Services.AddHttpClient<ApplicationUpdateService>(client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("CocktailOS-Kiosk-Updater");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 
 builder.Services.AddSingleton<DummyPumpOutput>();
 builder.Services.AddSingleton<GpioPumpOutput>();

@@ -69,7 +69,7 @@ fi
 
 install_base_packages() {
   local missing=()
-  for command_name in curl python3 tar sha256sum systemctl; do
+  for command_name in curl python3 tar sha256sum systemctl sudo; do
     command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
   done
 
@@ -77,7 +77,7 @@ install_base_packages() {
   command -v apt-get >/dev/null 2>&1 || fail "Fehlende Befehle: ${missing[*]}"
   log "Installiere Grundpakete: ${missing[*]}"
   apt-get update
-  apt-get install -y ca-certificates curl python3 coreutils tar systemd
+  apt-get install -y ca-certificates curl python3 coreutils tar systemd sudo
 }
 
 install_display_packages() {
@@ -285,6 +285,33 @@ Environment=ASPNETCORE_URLS=${APP_URL}
 [Install]
 WantedBy=multi-user.target
 SERVICE
+
+UPDATE_SERVICE_NAME="${SERVICE_NAME}-update"
+UPDATE_SCRIPT="/usr/local/lib/cocktailos-kiosk/update"
+UPDATE_SUDOERS_FILE="/etc/sudoers.d/${SERVICE_NAME}-update"
+install -d -m 0755 /usr/local/lib/cocktailos-kiosk
+cat > "$UPDATE_SCRIPT" <<UPDATE_SCRIPT
+#!/usr/bin/env bash
+set -Eeuo pipefail
+/usr/bin/curl --fail --silent --show-error --location "https://raw.githubusercontent.com/${REPO}/main/install.sh" | /usr/bin/bash
+UPDATE_SCRIPT
+chmod 0755 "$UPDATE_SCRIPT"
+chown root:root "$UPDATE_SCRIPT"
+cat > "/etc/systemd/system/${UPDATE_SERVICE_NAME}.service" <<UPDATE_SERVICE
+[Unit]
+Description=CocktailOS Kiosk update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=${UPDATE_SCRIPT}
+UPDATE_SERVICE
+cat > "$UPDATE_SUDOERS_FILE" <<SUDOERS
+${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block ${UPDATE_SERVICE_NAME}.service
+SUDOERS
+chmod 0440 "$UPDATE_SUDOERS_FILE"
+chown root:root "$UPDATE_SUDOERS_FILE"
 
 KIOSK_SERVICE_NAME="${SERVICE_NAME}-cage"
 KIOSK_SERVICE_FILE="/etc/systemd/system/${KIOSK_SERVICE_NAME}.service"

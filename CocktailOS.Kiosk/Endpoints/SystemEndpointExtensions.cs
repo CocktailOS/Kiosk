@@ -5,6 +5,7 @@ using CocktailOS.Kiosk.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 
 namespace CocktailOS.Kiosk.Endpoints;
 
@@ -12,17 +13,38 @@ public static class SystemEndpointExtensions
 {
     public static RouteGroupBuilder MapSystemEndpoints(this RouteGroupBuilder api)
     {
-        api.MapGet("/system", GetAsync); api.MapPut("/system", UpdateAsync); api.MapPut("/system/theme", UpdateThemeAsync); api.MapGet("/app-info", GetApplicationInfo);
+        api.MapGet("/system", GetAsync); api.MapPut("/system", UpdateAsync); api.MapPut("/system/theme", UpdateThemeAsync); api.MapGet("/app-info", GetApplicationInfo); api.MapGet("/app-update", GetApplicationUpdateAsync); api.MapPost("/app-update", StartApplicationUpdateAsync);
         return api;
     }
 
-    private static IResult GetApplicationInfo()
+    private static IResult GetApplicationInfo() => Results.Ok(new ApplicationInfoResponse(GetApplicationVersion()));
+
+    private static async Task<IResult> GetApplicationUpdateAsync(HttpContext context, ApplicationUpdateService updateService, CancellationToken ct)
+    {
+        if (!IsLocalRequest(context)) return Results.Forbid();
+        return Results.Ok(await updateService.GetStatusAsync(GetApplicationVersion(), ct));
+    }
+
+    private static async Task<IResult> StartApplicationUpdateAsync(HttpContext context, ApplicationUpdateService updateService, CancellationToken ct)
+    {
+        if (!IsLocalRequest(context)) return Results.Forbid();
+        var update = await updateService.GetStatusAsync(GetApplicationVersion(), ct);
+        if (!update.IsAvailable || string.IsNullOrWhiteSpace(update.LatestVersion))
+            return Results.Conflict(new ProblemDetails { Title = "Kein Update verfügbar", Detail = "Die Anwendung ist bereits aktuell oder die Update-Prüfung ist nicht verfügbar." });
+        if (!updateService.TryStartUpdate(out var error))
+            return Results.Problem(title: "Update konnte nicht gestartet werden", detail: error, statusCode: StatusCodes.Status503ServiceUnavailable);
+        return Results.Accepted("/api/app-update", new ApplicationUpdateStartResponse(update.LatestVersion));
+    }
+
+    private static string GetApplicationVersion()
     {
         var version = System.Reflection.Assembly.GetEntryAssembly()?
             .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
             .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().SingleOrDefault()?.InformationalVersion;
-        return Results.Ok(new ApplicationInfoResponse(string.IsNullOrWhiteSpace(version) ? "0.0.0" : version.Split('+')[0]));
+        return string.IsNullOrWhiteSpace(version) ? "0.0.0" : version.Split('+')[0];
     }
+
+    private static bool IsLocalRequest(HttpContext context) => context.Connection.RemoteIpAddress is { } address && IPAddress.IsLoopback(address);
 
     private static async Task<IResult> GetAsync(AppDbContext db, CancellationToken ct)
     {
