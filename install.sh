@@ -87,14 +87,19 @@ install_base_packages() {
 }
 
 install_display_packages() {
-  if command -v cage >/dev/null 2>&1 && command -v cog >/dev/null 2>&1; then
+  if { command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1; } \
+    && command -v xinit >/dev/null 2>&1 && command -v Xorg >/dev/null 2>&1; then
     return
   fi
 
-  command -v apt-get >/dev/null 2>&1 || fail "Der Displaymodus benötigt Cage und Cog. Installiere beide manuell oder verwende --headless."
-  log "Installiere Cage und Cog für den Wayland-Kiosk"
+  command -v apt-get >/dev/null 2>&1 || fail "Der Displaymodus benötigt Chromium, Xorg und xinit. Installiere diese manuell oder verwende --headless."
+  log "Installiere Chromium, Xorg, xinit und Openbox für den Kiosk"
   apt-get update
-  apt-get install -y cage cog
+  if apt-cache show chromium >/dev/null 2>&1; then
+    apt-get install -y chromium xserver-xorg xinit openbox
+  else
+    apt-get install -y chromium-browser xserver-xorg xinit openbox
+  fi
 }
 
 find_boot_config() {
@@ -126,7 +131,7 @@ configure_display() {
   set_boot_config_value "$boot_config" "hdmi_cvt" "1024 600 60 6 0 0 0"
   set_boot_config_value "$boot_config" "hdmi_drive" "1"
   sed -i -E '/^[[:space:]]*dtoverlay[[:space:]]*=[[:space:]]*vc4-(fkms|kms)-v3d([,[:space:]]|$)/d' "$boot_config"
-  printf '%s\n' 'dtoverlay=vc4-kms-v3d' >> "$boot_config"
+  printf '%s\n' 'dtoverlay=vc4-fkms-v3d' >> "$boot_config"
 }
 
 github_api() {
@@ -305,29 +310,62 @@ Environment=ASPNETCORE_URLS=${APP_URL}
 WantedBy=multi-user.target
 SERVICE
 
-KIOSK_SERVICE_NAME="${SERVICE_NAME}-cage"
+KIOSK_SERVICE_NAME="${SERVICE_NAME}-display"
 KIOSK_SERVICE_FILE="/etc/systemd/system/${KIOSK_SERVICE_NAME}.service"
-KIOSK_SCRIPT="/usr/local/lib/cocktailos-kiosk/cage-session"
+KIOSK_SCRIPT="/usr/local/lib/cocktailos-kiosk/kiosk-session"
+LEGACY_CAGE_SERVICE_NAME="${SERVICE_NAME}-cage"
+LEGACY_CAGE_SERVICE_FILE="/etc/systemd/system/${LEGACY_CAGE_SERVICE_NAME}.service"
 if [[ "$MODE" == "display" || "$MODE" == "both" ]]; then
   install -d -m 0755 /usr/local/lib/cocktailos-kiosk
-  install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "${DATA_ROOT}/runtime" "${DATA_ROOT}/cog"
+  install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "${DATA_ROOT}/browser"
+  install -d -m 0755 /etc/X11
+  cat > /etc/X11/Xwrapper.config <<'XWRAPPER'
+# Managed by CocktailOS Kiosk install.sh.
+allowed_users=anybody
+needs_root_rights=auto
+XWRAPPER
   cat > "$KIOSK_SCRIPT" <<KIOSK
 #!/usr/bin/env bash
 set -Eeuo pipefail
-export HOME="${DATA_ROOT}/cog"
+export HOME="${DATA_ROOT}/browser"
 export XDG_CONFIG_HOME="\${HOME}/.config"
 export XDG_CACHE_HOME="\${HOME}/.cache"
-export XDG_RUNTIME_DIR="${DATA_ROOT}/runtime"
-mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}" "\${XDG_RUNTIME_DIR}"
-chmod 0700 "\${XDG_RUNTIME_DIR}"
+mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}"
 
-exec /usr/bin/cage -s -- /usr/bin/cog --fullscreen --platform=wayland --web-process-count=1 "http://127.0.0.1:${PORT}"
+if command -v chromium >/dev/null 2>&1; then
+  chromium_bin="\$(command -v chromium)"
+elif command -v chromium-browser >/dev/null 2>&1; then
+  chromium_bin="\$(command -v chromium-browser)"
+else
+  echo "Chromium wurde nicht gefunden." >&2
+  exit 1
+fi
+
+args=(
+  --kiosk
+  --no-first-run
+  --no-default-browser-check
+  --disable-session-crashed-bubble
+  --disable-infobars
+  --password-store=basic
+  --disable-features=Translate,MediaRouter,OptimizationHints,OverscrollHistoryNavigation
+  --disable-pinch
+  --overscroll-history-navigation=0
+)
+if [[ "\${COCKTAILOS_LOW_PERFORMANCE:-false}" == "true" ]]; then
+  args+=(--disable-extensions --disable-component-update)
+fi
+
+openbox-session &
+openbox_pid=\$!
+trap 'kill "\${openbox_pid}" 2>/dev/null || true' EXIT
+exec "\${chromium_bin}" "\${args[@]}" "http://127.0.0.1:${PORT}"
 KIOSK
   chmod 0755 "$KIOSK_SCRIPT"
   chown root:root "$KIOSK_SCRIPT"
   cat > "$KIOSK_SERVICE_FILE" <<KIOSK_SERVICE
 [Unit]
-Description=CocktailOS Kiosk on Cage
+Description=CocktailOS Kiosk display
 After=${SERVICE_NAME}.service systemd-user-sessions.service
 Wants=${SERVICE_NAME}.service
 Conflicts=display-manager.service getty@tty1.service
@@ -335,7 +373,7 @@ Conflicts=display-manager.service getty@tty1.service
 [Service]
 Type=simple
 User=${SERVICE_USER}
-WorkingDirectory=${DATA_ROOT}/cog
+WorkingDirectory=${DATA_ROOT}/browser
 EnvironmentFile=-${ENV_FILE}
 PAMName=login
 SupplementaryGroups=video render input tty
@@ -344,7 +382,7 @@ StandardInput=tty
 TTYReset=yes
 TTYVHangup=yes
 TTYVTDisallocate=yes
-ExecStart=${KIOSK_SCRIPT}
+ExecStart=/usr/bin/xinit ${KIOSK_SCRIPT} -- :0 vt1 -keeptty -nolisten tcp -nocursor
 Restart=on-failure
 RestartSec=3
 
@@ -354,6 +392,7 @@ KIOSK_SERVICE
 else
   rm -f "$KIOSK_SERVICE_FILE"
 fi
+rm -f "$LEGACY_CAGE_SERVICE_FILE"
 
 log "Aktiviere Dienste (${MODE})"
 systemctl daemon-reload
@@ -361,10 +400,14 @@ systemctl enable "$SERVICE_NAME"
 systemctl restart "$SERVICE_NAME"
 if [[ "$MODE" == "display" || "$MODE" == "both" ]]; then
   systemctl disable --now display-manager.service 2>/dev/null || true
+  systemctl stop "$LEGACY_CAGE_SERVICE_NAME" 2>/dev/null || true
+  systemctl disable --now "$LEGACY_CAGE_SERVICE_NAME" 2>/dev/null || true
   systemctl enable "$KIOSK_SERVICE_NAME"
   systemctl restart "$KIOSK_SERVICE_NAME"
 else
   systemctl disable --now "$KIOSK_SERVICE_NAME" 2>/dev/null || true
+  systemctl stop "$LEGACY_CAGE_SERVICE_NAME" 2>/dev/null || true
+  systemctl disable --now "$LEGACY_CAGE_SERVICE_NAME" 2>/dev/null || true
 fi
 
 find "${INSTALL_ROOT}/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \

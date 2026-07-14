@@ -47,6 +47,48 @@ dotnet run --project CocktailOS.Kiosk/CocktailOS.Kiosk.csproj
 
 Die Anwendung ist anschließend standardmäßig unter `http://localhost:5276` erreichbar. Beim ersten Start werden die EF-Core-Migrationen angewendet und Demo-Daten erzeugt.
 
+## Installation auf dem Raspberry Pi
+
+Das Installationsskript lädt die aktuelle ARM64-Release, prüft deren Prüfsumme, richtet den systemd-Dienst ein und erhält bei Updates die SQLite-Datenbank sowie hochgeladene Bilder. Für die Display-Modi wird der Bildschirm auf 1024 × 600 konfiguriert. Nach der ersten Installation ist ein Neustart erforderlich.
+
+### Nur Netzwerkzugriff
+
+Startet ausschließlich die API; die Oberfläche ist im lokalen Netzwerk erreichbar.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --headless
+```
+
+### Nur lokales Display
+
+Startet die Oberfläche auf dem angeschlossenen Bildschirm. Die API ist dabei nur lokal auf dem Raspberry Pi erreichbar.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --display
+```
+
+### Display und Netzwerkzugriff
+
+Startet die Oberfläche auf dem Display und stellt die API zusätzlich im lokalen Netzwerk bereit.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --both
+```
+
+### Reduziertes Leistungsprofil
+
+Für leistungsschwächere Raspberry-Pi-Modelle kann der Display- oder Kombimodus mit einem reduzierten Profil installiert werden:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --both --low-performance
+```
+
+`--low-performance` ist nur zusammen mit `--display` oder `--both` gültig. Nach einer Installation mit Display bitte einmal neu starten:
+
+```bash
+sudo reboot
+```
+
 ## Daten und Bilder
 
 | Inhalt | Speicherort |
