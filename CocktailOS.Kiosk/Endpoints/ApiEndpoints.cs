@@ -45,6 +45,12 @@ public static class ApiEndpoints
         api.MapGet("/dispenses/current", (DispenseService service) => Results.Ok(service.GetStatus()));
         api.MapPost("/dispenses", StartDispenseAsync);
         api.MapPost("/dispenses/current/stop", StopDispenseAsync);
+        api.MapGet("/cleaning/current", (DispenseService service) => Results.Ok(service.GetStatus()));
+        api.MapPost("/cleaning", StartPumpCleaningAsync);
+        api.MapPost("/cleaning/current/stop", StopDispenseAsync);
+        api.MapGet("/priming/current", (DispenseService service) => Results.Ok(service.GetStatus()));
+        api.MapPost("/priming", StartPumpPrimingAsync);
+        api.MapPost("/priming/current/stop", StopDispenseAsync);
 
         return endpoints;
     }
@@ -628,6 +634,48 @@ public static class ApiEndpoints
 
     private static async Task<IResult> StopDispenseAsync(DispenseService service) =>
         Results.Ok(await service.StopAsync());
+
+    private static async Task<IResult> StartPumpCleaningAsync(
+        StartPumpCleaningRequest request,
+        DispenseService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Results.Accepted(
+                "/api/cleaning/current",
+                await service.StartCleaningAsync(request.PumpIds, request.DurationSeconds, cancellationToken));
+        }
+        catch (DispenseValidationException exception)
+        {
+            return Results.BadRequest(new ProblemDetails { Title = "Reinigung nicht möglich", Detail = exception.Message });
+        }
+        catch (DispenseConflictException exception)
+        {
+            return Results.Conflict(new ProblemDetails { Title = "Pumpen sind belegt", Detail = exception.Message });
+        }
+    }
+
+    private static async Task<IResult> StartPumpPrimingAsync(
+        StartPumpPrimingRequest request,
+        DispenseService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Results.Accepted(
+                "/api/priming/current",
+                await service.StartPrimingAsync(request.PumpId, cancellationToken));
+        }
+        catch (DispenseValidationException exception)
+        {
+            return Results.BadRequest(new ProblemDetails { Title = "Vorbereitung nicht möglich", Detail = exception.Message });
+        }
+        catch (DispenseConflictException exception)
+        {
+            return Results.Conflict(new ProblemDetails { Title = "Pumpen sind belegt", Detail = exception.Message });
+        }
+    }
 
     private static IResult Validation(string key, string message) =>
         Results.ValidationProblem(new Dictionary<string, string[]> { [key] = [message] });

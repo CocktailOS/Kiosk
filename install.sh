@@ -125,7 +125,7 @@ configure_display() {
   set_boot_config_value "$boot_config" "hdmi_cvt" "1024 600 60 6 0 0 0"
   set_boot_config_value "$boot_config" "hdmi_drive" "1"
   sed -i -E '/^[[:space:]]*dtoverlay[[:space:]]*=[[:space:]]*vc4-(fkms|kms)-v3d([,[:space:]]|$)/d' "$boot_config"
-  printf '%s\n' 'dtoverlay=vc4-kms-v3d' >> "$boot_config"
+  printf '%s\n' 'dtoverlay=vc4-fkms-v3d' >> "$boot_config"
 }
 
 github_api() {

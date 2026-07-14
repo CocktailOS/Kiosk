@@ -8,6 +8,8 @@ CocktailOS Kiosk ist eine .NET-10-Minimal-API mit einer für einen 7-Zoll-Touchs
 
 - Cocktailauswahl mit Bildern, Größen und proportional skalierbaren Rezepten
 - Animierter Ausschank mit Fortschritt, Stopp-Schaltfläche und Erfolgsrückmeldung
+- Reinigungsmodus für frei wählbare aktive Pumpen mit einstellbarer Laufzeit und Sofort-Stopp
+- Vorbereitungsmodus direkt pro Pumpe zum Befüllen der Schläuche: Taste gedrückt halten, beim Loslassen sofort stoppen
 - Verwaltung von Cocktails, Zutaten, Pumpen, Größen und Systemkonfiguration in Dialogen
 - Bis zu acht parallele Pumpen
 - Je Pumpe konfigurierbare GPIO-Nummer, Förderrate und active-HIGH-/active-LOW-Relaislogik
@@ -135,6 +137,8 @@ Alle Routen beginnen mit `/api`.
 | System | `GET /system`, `PUT /system` |
 | Bilder | `POST /images` – JPG, PNG, WebP oder GIF bis 5 MB |
 | Ausschank | `POST /dispenses`, `GET /dispenses/current`, `POST /dispenses/current/stop` |
+| Reinigung | `POST /cleaning`, `GET /cleaning/current`, `POST /cleaning/current/stop` |
+| Vorbereitung | `POST /priming`, `GET /priming/current`, `POST /priming/current/stop` |
 
 Beispiel für einen Ausschank:
 

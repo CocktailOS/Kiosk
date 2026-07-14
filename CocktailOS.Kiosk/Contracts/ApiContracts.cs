@@ -51,6 +51,9 @@ public sealed record ApplicationInfoResponse(string Version);
 
 public sealed record StartDispenseRequest(int CocktailId, int SizeId);
 
+public sealed record StartPumpCleaningRequest(IReadOnlyList<int>? PumpIds, int DurationSeconds);
+public sealed record StartPumpPrimingRequest(int PumpId);
+
 public sealed record DispenseStatusResponse(
     Guid? Id,
     string Status,
@@ -60,7 +63,8 @@ public sealed record DispenseStatusResponse(
     double EstimatedDurationSeconds,
     double Progress,
     string? Error,
-    IReadOnlyList<DispenseStepResponse> Steps);
+    IReadOnlyList<DispenseStepResponse> Steps,
+    string Mode);
 
 public sealed record DispenseStepResponse(
     string IngredientName,

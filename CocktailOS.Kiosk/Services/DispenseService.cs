@@ -11,6 +11,9 @@ public sealed class DispenseService(
     ILogger<DispenseService> logger)
 {
     public const int MaximumParallelPumps = 8;
+    public const int MinimumCleaningDurationSeconds = 5;
+    public const int MaximumCleaningDurationSeconds = 300;
+    public const int MaximumPrimingDurationSeconds = 60;
 
     private readonly object _sync = new();
     private CancellationTokenSource? _cancellation;
@@ -29,11 +32,45 @@ public sealed class DispenseService(
             plan = await CreatePlanAsync(db, cocktailId, sizeId, cancellationToken);
         }
 
+        return StartPlan(plan);
+    }
+
+    public async Task<DispenseStatusResponse> StartCleaningAsync(
+        IReadOnlyList<int>? pumpIds,
+        int durationSeconds,
+        CancellationToken cancellationToken)
+    {
+        DispensePlan plan;
+        await using (var scope = scopeFactory.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            plan = await CreateCleaningPlanAsync(db, pumpIds, durationSeconds, cancellationToken);
+        }
+
+        return StartPlan(plan);
+    }
+
+    public async Task<DispenseStatusResponse> StartPrimingAsync(
+        int pumpId,
+        CancellationToken cancellationToken)
+    {
+        DispensePlan plan;
+        await using (var scope = scopeFactory.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            plan = await CreatePrimingPlanAsync(db, pumpId, cancellationToken);
+        }
+
+        return StartPlan(plan);
+    }
+
+    private DispenseStatusResponse StartPlan(DispensePlan plan)
+    {
         lock (_sync)
         {
             if (_runningTask is { IsCompleted: false })
             {
-                throw new DispenseConflictException("Es läuft bereits ein Ausschank.");
+                throw new DispenseConflictException("Es läuft bereits ein Pumpenvorgang.");
             }
 
             _cancellation?.Dispose();
@@ -236,10 +273,94 @@ public sealed class DispenseService(
 
         return new DispensePlan(
             Guid.NewGuid(),
+            PumpOperationModes.Dispense,
             cocktail.Name,
             size.Name,
             new HardwareSettings(configuration.PumpDriver, configuration.PinNumberingScheme),
             steps);
+    }
+
+    private static async Task<DispensePlan> CreateCleaningPlanAsync(
+        AppDbContext db,
+        IReadOnlyList<int>? pumpIds,
+        int durationSeconds,
+        CancellationToken cancellationToken)
+    {
+        if (pumpIds is null || pumpIds.Count == 0)
+        {
+            throw new DispenseValidationException("Wähle mindestens eine Pumpe für die Reinigung aus.");
+        }
+
+        if (pumpIds.Count > MaximumParallelPumps || pumpIds.Distinct().Count() != pumpIds.Count)
+        {
+            throw new DispenseValidationException($"Wähle 1 bis {MaximumParallelPumps} unterschiedliche Pumpen aus.");
+        }
+
+        if (durationSeconds is < MinimumCleaningDurationSeconds or > MaximumCleaningDurationSeconds)
+        {
+            throw new DispenseValidationException(
+                $"Die Reinigungsdauer muss zwischen {MinimumCleaningDurationSeconds} und {MaximumCleaningDurationSeconds} Sekunden liegen.");
+        }
+
+        var pumps = await db.Pumps
+            .AsNoTracking()
+            .Where(x => pumpIds.Contains(x.Id) && x.IsEnabled)
+            .OrderBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
+        if (pumps.Count != pumpIds.Count)
+        {
+            throw new DispenseValidationException("Mindestens eine ausgewählte Pumpe existiert nicht oder ist deaktiviert.");
+        }
+
+        var configuration = await db.MachineConfigurations.AsNoTracking()
+            .SingleAsync(x => x.Id == MachineConfiguration.SingletonId, cancellationToken);
+
+        var steps = pumps.Select(pump => new DispenseStep(
+            pump.Name,
+            0,
+            new PumpChannel(pump.Id, pump.Name, pump.GpioPin, pump.ActiveHigh),
+            durationSeconds)).ToArray();
+
+        return new DispensePlan(
+            Guid.NewGuid(),
+            PumpOperationModes.Cleaning,
+            "Pumpenreinigung",
+            $"{durationSeconds} Sekunden",
+            new HardwareSettings(configuration.PumpDriver, configuration.PinNumberingScheme),
+            steps);
+    }
+
+    private static async Task<DispensePlan> CreatePrimingPlanAsync(
+        AppDbContext db,
+        int pumpId,
+        CancellationToken cancellationToken)
+    {
+        var pump = await db.Pumps
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == pumpId && x.IsEnabled, cancellationToken);
+
+        if (pump is null)
+        {
+            throw new DispenseValidationException("Die ausgewählte Pumpe existiert nicht oder ist deaktiviert.");
+        }
+
+        var configuration = await db.MachineConfigurations.AsNoTracking()
+            .SingleAsync(x => x.Id == MachineConfiguration.SingletonId, cancellationToken);
+
+        var step = new DispenseStep(
+            pump.Name,
+            0,
+            new PumpChannel(pump.Id, pump.Name, pump.GpioPin, pump.ActiveHigh),
+            MaximumPrimingDurationSeconds);
+
+        return new DispensePlan(
+            Guid.NewGuid(),
+            PumpOperationModes.Priming,
+            "Pumpe vorbereiten",
+            pump.Name,
+            new HardwareSettings(configuration.PumpDriver, configuration.PinNumberingScheme),
+            [step]);
     }
 
     private static DispenseStatusResponse CreateResponse(DispenseState state)
@@ -265,11 +386,13 @@ public sealed class DispenseService(
                 x.IngredientName,
                 x.AmountMl,
                 x.Channel.PumpId,
-                x.DurationSeconds)).ToArray());
+                x.DurationSeconds)).ToArray(),
+            state.Mode);
     }
 
     private sealed record DispensePlan(
         Guid Id,
+        string Mode,
         string CocktailName,
         string SizeName,
         HardwareSettings Hardware,
@@ -283,6 +406,7 @@ public sealed class DispenseService(
 
     private sealed record DispenseState(
         Guid? Id,
+        string Mode,
         string Status,
         string? CocktailName,
         string? SizeName,
@@ -293,10 +417,11 @@ public sealed class DispenseService(
         IReadOnlyList<DispenseStep> Steps)
     {
         public static DispenseState Idle { get; } = new(
-            null, DispenseStatuses.Idle, null, null, null, null, 0, null, []);
+            null, PumpOperationModes.Dispense, DispenseStatuses.Idle, null, null, null, null, 0, null, []);
 
         public static DispenseState Running(DispensePlan plan) => new(
             plan.Id,
+            plan.Mode,
             DispenseStatuses.Running,
             plan.CocktailName,
             plan.SizeName,
@@ -306,6 +431,13 @@ public sealed class DispenseService(
             null,
             plan.Steps);
     }
+}
+
+public static class PumpOperationModes
+{
+    public const string Dispense = "dispense";
+    public const string Cleaning = "cleaning";
+    public const string Priming = "priming";
 }
 
 public static class DispenseStatuses

@@ -18,7 +18,8 @@
         selectedCocktail: null,
         selectedSizeId: null,
         pollTimer: null,
-        completionTimer: null
+        completionTimer: null,
+        primingPollTimer: null
     };
 
     const icons = {
@@ -32,7 +33,9 @@
         back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>',
         edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 16-.8 4.8L8 20l11-11-4-4zM13.5 6.5l4 4"/></svg>',
         trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M9 3h6l1 4H8zM6 7l1 14h10l1-14M10 11v6M14 11v6"/></svg>',
-        plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>'
+        plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+        clean: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3S6.5 9.1 6.5 14a5.5 5.5 0 0 0 11 0C17.5 9.1 12 3 12 3Z"/><path d="M9.4 15.2a2.8 2.8 0 0 0 2.8 2.2"/></svg>',
+        prime: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 20V8.5a6 6 0 0 1 12 0V20"/><path d="M3 20h18M9 12h6M12 4v8"/><path d="M12 16v2"/></svg>'
     };
 
     document.addEventListener('DOMContentLoaded', initialize);
@@ -44,7 +47,14 @@
             await loadAll();
             renderRoute();
             const current = await api('/api/dispenses/current');
-            if (current.status === 'running') showDispense(current);
+            if (current.status === 'running') {
+                if (current.mode === 'cleaning') showCleaningProgress(current);
+                else if (current.mode === 'priming') {
+                    await api('/api/priming/current/stop', { method: 'POST' });
+                    showToast('Die laufende Pumpenvorbereitung wurde aus Sicherheitsgründen gestoppt.');
+                }
+                else showDispense(current);
+            }
         } catch (error) {
             renderFatal(error.message);
         }
@@ -182,8 +192,11 @@
             try {
                 const status = await api('/api/dispenses/current');
                 if (status.status === 'running') updateDispenseUi(status);
-                else if (status.status === 'completed') showSuccess(status);
-                else if (status.status === 'stopped') finishStopped();
+                else if (status.status === 'completed') {
+                    if (status.mode === 'cleaning') showCleaningSuccess();
+                    else showSuccess(status);
+                }
+                else if (status.status === 'stopped') finishStopped(status.mode);
                 else if (status.status === 'failed') finishFailed(status.error);
             } catch (error) {
                 showToast(error.message, true);
@@ -219,7 +232,7 @@
         button.textContent = 'Pumpen werden gestoppt …';
         try {
             await api('/api/dispenses/current/stop', { method: 'POST' });
-            finishStopped();
+            finishStopped(button.closest('[data-operation-mode]')?.dataset.operationMode);
         } catch (error) {
             button.disabled = false;
             button.innerHTML = `${icons.stop} Sofort stoppen`;
@@ -242,18 +255,18 @@
         state.completionTimer = setTimeout(() => { layer.remove(); renderHome(); }, 5000);
     }
 
-    function finishStopped() {
+    function finishStopped(mode) {
         clearInterval(state.pollTimer);
         document.querySelector('.modal-layer')?.remove();
-        showToast('Ausschank gestoppt. Alle Pumpen sind aus.');
-        renderHome();
+        showToast(mode === 'cleaning' ? 'Reinigung gestoppt. Alle Pumpen sind aus.' : 'Ausschank gestoppt. Alle Pumpen sind aus.');
+        renderRoute();
     }
 
     function finishFailed(message) {
         clearInterval(state.pollTimer);
         document.querySelector('.modal-layer')?.remove();
         showToast(message || 'Ausschank fehlgeschlagen.', true);
-        renderHome();
+        renderRoute();
     }
 
     function closeLayer(layer) {
@@ -465,13 +478,21 @@
     }
 
     function renderPumpSettings(main) {
-        const list = state.pumps.map(x => dataRow(x.name, `GPIO ${x.gpioPin} · ${formatFlowRate(x.flowRateMlPerSecond)} ml/s · ${x.ingredientName || 'Keine Zutat'}`, x.id, { label: x.isEnabled ? 'Aktiv' : 'Deaktiviert', isOff: !x.isEnabled })).join('');
+        const list = state.pumps.map(pumpDataRow).join('');
         main.innerHTML = settingsListTemplate('Pumpen', 'GPIO, Förderrate und zugeordnete Zutaten verwalten.', 'Pumpe anlegen', list || emptyList('Noch keine Pumpen vorhanden.'));
+        const cleaningButton = document.createElement('button');
+        cleaningButton.type = 'button';
+        cleaningButton.className = 'secondary-button cleaning-mode-button';
+        cleaningButton.disabled = !state.pumps.some(x => x.isEnabled);
+        cleaningButton.innerHTML = `${icons.clean} Reinigungsmodus`;
+        main.querySelector('.settings-header-actions').prepend(cleaningButton);
+        cleaningButton.addEventListener('click', openCleaningDialog);
         main.querySelector('.add-entity').addEventListener('click', () => openPumpEditor());
         bindRowActions(main, id => openPumpEditor(id), id => {
             const item = state.pumps.find(x => x.id === id);
             openDeleteDialog('pumps', id, 'Pumpe', item?.name || 'Pumpe');
         });
+        bindPumpPrimingButtons(main);
     }
 
     function openPumpEditor(id = null) {
@@ -481,6 +502,229 @@
         const flowMaximum = Math.max(100, Math.ceil(flowRate / 10) * 10);
         const form = `<form id="entity-form" class="form-grid"><div class="form-field full"><label for="pump-name">Name</label><input id="pump-name" name="name" required maxlength="100" value="${escapeHtml(item?.name || '')}"></div><div class="form-field full"><label for="gpio-pin">GPIO-Pin</label><input id="gpio-pin" name="gpioPin" type="number" min="0" max="40" required inputmode="numeric" value="${item?.gpioPin ?? ''}"></div>${valueSliderField('flow-rate', 'flowRate', 'Förderrate', 'ml/s', .1, flowMaximum, .1, flowRate, true)}<div class="form-field full"><label for="pump-ingredient">Zutat</label><select id="pump-ingredient" name="ingredientId"><option value="">Keine Zuordnung</option>${optionList(state.ingredients, item?.ingredientId, x => x.name)}</select></div><div class="form-field full checkbox-row"><label class="checkbox-field"><input name="activeHigh" type="checkbox" ${item?.activeHigh ? 'checked' : ''}> Relais ist active HIGH</label><label class="checkbox-field"><input name="isEnabled" type="checkbox" ${item ? (item.isEnabled ? 'checked' : '') : 'checked'}> Pumpe ist aktiviert</label></div>${dialogFormActions()}</form>`;
         openSimpleEditorDialog(item ? 'Pumpe bearbeiten' : 'Pumpe anlegen', 'Maximal 8 Pumpen. Förderrate bitte vorher kalibrieren.', form, 'pumps', 'Pumpe', formElement => ({ name: formElement.elements.name.value, gpioPin: Number(formElement.elements.gpioPin.value), flowRateMlPerSecond: Number(formElement.elements.flowRate.value), activeHigh: formElement.elements.activeHigh.checked, isEnabled: formElement.elements.isEnabled.checked, ingredientId: formElement.elements.ingredientId.value ? Number(formElement.elements.ingredientId.value) : null }));
+    }
+
+    function openPrimingDialog() {
+        const activePumps = state.pumps.filter(x => x.isEnabled);
+        if (!activePumps.length) {
+            showToast('Aktiviere zuerst mindestens eine Pumpe.', true);
+            return;
+        }
+
+        const pumpOptions = activePumps.map(pump => `<label class="priming-pump-option"><input type="radio" name="primingPump" value="${pump.id}"><span><strong>${escapeHtml(pump.name)}</strong><small>GPIO ${pump.gpioPin} · ${escapeHtml(pump.ingredientName || 'Keine Zutat')}</small></span></label>`).join('');
+        const layer = document.createElement('div');
+        layer.className = 'modal-layer settings-dialog-layer';
+        layer.returnFocus = document.activeElement;
+        layer.innerHTML = `<div class="modal-scrim"></div><section class="settings-dialog settings-dialog-wide priming-dialog" role="dialog" aria-modal="true" aria-labelledby="priming-dialog-title"><div class="settings-dialog-content"><header class="settings-dialog-header"><div><h2 id="priming-dialog-title">Pumpe vorbereiten</h2><p>Schläuche füllen: Taste gedrückt halten, zum Stoppen loslassen.</p></div></header><div class="settings-dialog-body"><div class="priming-note"><strong>Hinweis</strong><span>Die Pumpe stoppt beim Loslassen. Zusätzlich schaltet sie sich nach spätestens 60 Sekunden automatisch ab.</span></div><fieldset class="priming-pump-fieldset"><legend>Pumpe auswählen</legend><div class="priming-pump-grid">${pumpOptions}</div></fieldset><button type="button" class="priming-hold-button" disabled aria-describedby="priming-hold-hint">${icons.prime}<span class="priming-hold-label">Pumpe auswählen</span></button><p class="priming-hold-hint" id="priming-hold-hint">Gedrückt halten, bis Flüssigkeit am Auslass ankommt.</p><div class="form-actions"><button type="button" class="secondary-button priming-cancel">Abbrechen</button></div></div></div></section>`;
+        app.append(layer);
+
+        const priming = {
+            selectedPumpId: null,
+            holding: false,
+            starting: false,
+            running: false,
+            stopping: false,
+            stopAfterStart: false,
+            closed: false
+        };
+        const holdButton = layer.querySelector('.priming-hold-button');
+        const label = layer.querySelector('.priming-hold-label');
+        const cancelButton = layer.querySelector('.priming-cancel');
+        const pumpInputs = [...layer.querySelectorAll('[name="primingPump"]')];
+        const clearPrimingPoll = () => {
+            clearInterval(state.primingPollTimer);
+            state.primingPollTimer = null;
+        };
+        const setReady = (message = 'Gedrückt halten zum Fördern') => {
+            clearPrimingPoll();
+            priming.starting = false;
+            priming.running = false;
+            priming.stopping = false;
+            priming.stopAfterStart = false;
+            holdButton.classList.remove('is-active', 'is-starting');
+            holdButton.disabled = !priming.selectedPumpId || priming.closed;
+            label.textContent = message;
+            cancelButton.disabled = false;
+            pumpInputs.forEach(input => { input.disabled = false; });
+        };
+        const stopPriming = async (showMessage = false) => {
+            priming.holding = false;
+            if (priming.starting) {
+                priming.stopAfterStart = true;
+                return;
+            }
+            if (!priming.running || priming.stopping) return;
+            priming.stopping = true;
+            clearPrimingPoll();
+            holdButton.classList.remove('is-active');
+            holdButton.classList.add('is-starting');
+            label.textContent = 'Pumpe wird gestoppt …';
+            try {
+                await api('/api/priming/current/stop', { method: 'POST' });
+                setReady();
+                if (showMessage) showToast('Pumpe gestoppt.');
+            } catch (error) {
+                setReady('Stopp fehlgeschlagen – erneut versuchen');
+                showToast(error.message, true);
+            }
+        };
+        const startPrimingPoll = () => {
+            clearPrimingPoll();
+            state.primingPollTimer = setInterval(async () => {
+                try {
+                    const status = await api('/api/priming/current');
+                    if (status.status !== 'running' || status.mode !== 'priming') {
+                        setReady();
+                        showToast('Die Vorbereitung wurde automatisch beendet.');
+                    }
+                } catch (error) {
+                    clearPrimingPoll();
+                    showToast(error.message, true);
+                }
+            }, 300);
+        };
+        const startPriming = async () => {
+            if (!priming.selectedPumpId || priming.starting || priming.running || priming.closed) return;
+            priming.holding = true;
+            priming.starting = true;
+            cancelButton.disabled = true;
+            pumpInputs.forEach(input => { input.disabled = true; });
+            holdButton.classList.add('is-starting');
+            label.textContent = 'Pumpe startet …';
+            try {
+                const status = await api('/api/priming', { method: 'POST', body: { pumpId: priming.selectedPumpId } });
+                priming.starting = false;
+                priming.running = status.status === 'running';
+                if (!priming.running || priming.stopAfterStart || !priming.holding) {
+                    await stopPriming();
+                    return;
+                }
+                holdButton.classList.remove('is-starting');
+                holdButton.classList.add('is-active');
+                label.textContent = 'Pumpe läuft – gedrückt halten';
+                startPrimingPoll();
+            } catch (error) {
+                setReady();
+                showToast(error.message, true);
+            }
+        };
+        const releasePriming = () => {
+            priming.holding = false;
+            void stopPriming();
+        };
+        const closeDialog = () => {
+            priming.closed = true;
+            clearPrimingPoll();
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            closeLayer(layer);
+            setTimeout(() => { if (layer.returnFocus?.isConnected) layer.returnFocus.focus(); }, 180);
+        };
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') releasePriming();
+        };
+
+        pumpInputs.forEach(input => input.addEventListener('change', () => {
+            priming.selectedPumpId = Number(input.value);
+            setReady();
+        }));
+        holdButton.addEventListener('pointerdown', event => {
+            event.preventDefault();
+            if (holdButton.disabled) return;
+            holdButton.setPointerCapture?.(event.pointerId);
+            void startPriming();
+        });
+        ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => holdButton.addEventListener(type, releasePriming));
+        holdButton.addEventListener('keydown', event => {
+            if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
+                event.preventDefault();
+                void startPriming();
+            }
+        });
+        holdButton.addEventListener('keyup', event => {
+            if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault();
+                releasePriming();
+            }
+        });
+        cancelButton.addEventListener('click', closeDialog);
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        requestAnimationFrame(() => pumpInputs[0]?.focus());
+    }
+
+    function openCleaningDialog() {
+        const activePumps = state.pumps.filter(x => x.isEnabled);
+        if (!activePumps.length) {
+            showToast('Aktiviere zuerst mindestens eine Pumpe.', true);
+            return;
+        }
+
+        const pumpOptions = activePumps.map(pump => `<label class="cleaning-pump-option"><input type="checkbox" name="pumpId" value="${pump.id}" checked><span><strong>${escapeHtml(pump.name)}</strong><small>GPIO ${pump.gpioPin} · ${escapeHtml(pump.ingredientName || 'Keine Zutat')}</small></span></label>`).join('');
+        const layer = createSettingsDialog('settings-dialog-wide cleaning-dialog');
+        const body = `<form id="cleaning-form"><div class="cleaning-note"><strong>Vor dem Start</strong><span>Zuläufe in die geeignete Reinigungsflüssigkeit und Ausläufe sicher in einen Auffangbehälter legen.</span></div><fieldset class="cleaning-pump-fieldset"><legend>Aktive Pumpen auswählen</legend><button type="button" class="small-action cleaning-toggle-all">Alle abwählen</button><div class="cleaning-pump-grid">${pumpOptions}</div></fieldset>${valueSliderField('cleaning-duration', 'durationSeconds', 'Laufzeit', 'Sek.', 5, 300, 5, 30)}<div class="form-actions"><button type="button" class="secondary-button" data-dialog-close>Abbrechen</button><button type="submit" class="primary-button start-cleaning">${icons.clean} Reinigung starten</button></div></form>`;
+        setSettingsDialogContent(layer, 'Pumpen reinigen', 'Ausgewählte Pumpen laufen gleichzeitig und stoppen automatisch.', body);
+        bindValueSliders(layer);
+
+        const form = layer.querySelector('#cleaning-form');
+        const toggleAll = layer.querySelector('.cleaning-toggle-all');
+        const submit = layer.querySelector('.start-cleaning');
+        const checkboxes = [...form.querySelectorAll('[name="pumpId"]')];
+        const updateSelection = () => {
+            const selectedCount = checkboxes.filter(x => x.checked).length;
+            submit.disabled = selectedCount === 0;
+            toggleAll.textContent = selectedCount === checkboxes.length ? 'Alle abwählen' : 'Alle auswählen';
+        };
+
+        toggleAll.addEventListener('click', () => {
+            const selectAll = checkboxes.some(x => !x.checked);
+            checkboxes.forEach(x => { x.checked = selectAll; });
+            updateSelection();
+        });
+        checkboxes.forEach(x => x.addEventListener('change', updateSelection));
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            const pumpIds = checkboxes.filter(x => x.checked).map(x => Number(x.value));
+            if (!pumpIds.length) return;
+            submit.disabled = true;
+            submit.textContent = 'Reinigung wird gestartet …';
+            try {
+                const status = await api('/api/cleaning', {
+                    method: 'POST',
+                    body: { pumpIds, durationSeconds: Number(form.elements.durationSeconds.value) }
+                });
+                showCleaningProgress(status);
+            } catch (error) {
+                submit.disabled = false;
+                submit.innerHTML = `${icons.clean} Reinigung starten`;
+                showToast(error.message, true);
+            }
+        });
+    }
+
+    function showCleaningProgress(status) {
+        document.querySelector('.modal-layer')?.remove();
+        const layer = document.createElement('div');
+        layer.className = 'modal-layer';
+        const pumpSummary = status.steps.length === 1 ? '1 Pumpe läuft' : `${status.steps.length} Pumpen laufen gleichzeitig`;
+        layer.innerHTML = `<div class="modal-scrim"></div><section class="dispense-panel cleaning-progress-panel" data-operation-mode="cleaning" role="dialog" aria-modal="true" aria-labelledby="cleaning-progress-title"><div class="glass-stage cleaning-stage"><div class="glass" aria-hidden="true"><div class="liquid cleaning-liquid"><i class="bubble one"></i><i class="bubble two"></i><i class="bubble three"></i></div></div></div><div class="dispense-copy"><span class="eyebrow">Reinigungsmodus aktiv</span><h2 id="cleaning-progress-title">Pumpen werden gespült</h2><p>${pumpSummary} · ${escapeHtml(status.sizeName || '')}</p><div class="progress-track"><div class="progress-bar cleaning-progress-bar"></div></div><div class="progress-row"><span class="progress-label">0 %</span><span class="time-label">Noch einen Moment</span></div><button class="danger-button wide-button stop-dispense">${icons.stop} Sofort stoppen</button><p class="stop-hint">Stop schaltet alle Pumpen unmittelbar aus.</p></div></section>`;
+        app.append(layer);
+        layer.querySelector('.stop-dispense').addEventListener('click', stopDispense);
+        updateDispenseUi(status);
+        if (window.gsap && !reduceMotion) gsap.from('.cleaning-progress-panel', { opacity: 0, scale: .97, duration: .35, ease: 'power3.out' });
+        startPolling();
+    }
+
+    function showCleaningSuccess() {
+        clearInterval(state.pollTimer);
+        const layer = document.querySelector('.modal-layer');
+        if (!layer || layer.querySelector('.success-state')) return;
+        layer.innerHTML = `<div class="modal-scrim"></div><section class="success-state cleaning-success" role="status"><div><svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="8" aria-hidden="true"><circle class="check-circle" cx="60" cy="60" r="48"/><path class="check-path" d="m36 61 16 16 34-38"/></svg><h2>Reinigung abgeschlossen</h2><p>Alle ausgewählten Pumpen sind gespült und ausgeschaltet.</p><button type="button" class="primary-button cleaning-done">Zurück zu den Pumpen</button></div></section>`;
+        layer.querySelector('.cleaning-done').addEventListener('click', () => {
+            layer.remove();
+            state.activeTab = 'pumps';
+            if (location.hash.startsWith('#/settings')) renderSettings();
+            else location.hash = '#/settings';
+        });
+        layer.querySelector('.cleaning-done').focus();
     }
 
     function renderSizeSettings(main) {
@@ -516,7 +760,7 @@
     }
 
     function settingsListTemplate(title, intro, addLabel, content) {
-        return `<div class="settings-list-view"><div class="settings-list-header"><div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(intro)}</p></div><button type="button" class="primary-button add-entity">${icons.plus} ${escapeHtml(addLabel)}</button></div><section class="settings-card list-card"><div class="data-list">${content}</div></section></div>`;
+        return `<div class="settings-list-view"><div class="settings-list-header"><div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(intro)}</p></div><div class="settings-header-actions"><button type="button" class="primary-button add-entity">${icons.plus} ${escapeHtml(addLabel)}</button></div></div><section class="settings-card list-card"><div class="data-list">${content}</div></section></div>`;
     }
 
     function createSettingsDialog(className = '') {
@@ -612,9 +856,129 @@
         main.querySelectorAll('[data-delete]').forEach(button => button.addEventListener('click', () => remove(Number(button.dataset.delete))));
     }
 
+    function bindPumpPrimingButtons(main) {
+        const buttons = [...main.querySelectorAll('[data-prime]')];
+        let current = null;
+        const restoreButton = button => {
+            button.disabled = button.dataset.enabled !== 'true';
+            button.classList.remove('is-active', 'is-starting');
+            button.innerHTML = `${icons.prime}<span>Füllen</span>`;
+        };
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') releasePriming();
+        };
+        const clearPriming = () => {
+            clearInterval(state.primingPollTimer);
+            state.primingPollTimer = null;
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            buttons.forEach(restoreButton);
+            current = null;
+        };
+        const stopPriming = async (session = current) => {
+            if (!session || session !== current) return;
+            session.holding = false;
+            if (session.starting) {
+                session.stopAfterStart = true;
+                return;
+            }
+            if (!session.running || session.stopping) return;
+            session.stopping = true;
+            clearInterval(state.primingPollTimer);
+            session.button.classList.remove('is-active');
+            session.button.classList.add('is-starting');
+            session.button.innerHTML = `${icons.stop}<span>Stoppt …</span>`;
+            try {
+                await api('/api/priming/current/stop', { method: 'POST' });
+                if (current === session) clearPriming();
+            } catch (error) {
+                if (current === session) clearPriming();
+                showToast(error.message, true);
+            }
+        };
+        const releasePriming = button => {
+            if (button && current?.button !== button) return;
+            void stopPriming();
+        };
+        const startPrimingPoll = session => {
+            clearInterval(state.primingPollTimer);
+            state.primingPollTimer = setInterval(async () => {
+                try {
+                    const status = await api('/api/priming/current');
+                    if (status.status !== 'running' || status.mode !== 'priming') {
+                        if (current === session) clearPriming();
+                        showToast('Die Vorbereitung wurde automatisch beendet.');
+                    }
+                } catch (error) {
+                    if (current === session) clearPriming();
+                    showToast(error.message, true);
+                }
+            }, 300);
+        };
+        const startPriming = async button => {
+            if (current || button.disabled) return;
+            const session = { button, pumpId: Number(button.dataset.prime), holding: true, starting: true, running: false, stopping: false, stopAfterStart: false };
+            current = session;
+            buttons.forEach(item => { item.disabled = true; });
+            button.disabled = false;
+            button.classList.add('is-starting');
+            button.innerHTML = `${icons.prime}<span>Startet …</span>`;
+            document.addEventListener('visibilitychange', onVisibilityChange);
+            try {
+                const status = await api('/api/priming', { method: 'POST', body: { pumpId: session.pumpId } });
+                session.starting = false;
+                session.running = status.status === 'running';
+                if (!session.running) {
+                    if (current === session) clearPriming();
+                    return;
+                }
+                if (session.stopAfterStart || !session.holding) {
+                    await stopPriming(session);
+                    return;
+                }
+                button.classList.remove('is-starting');
+                button.classList.add('is-active');
+                button.innerHTML = `${icons.prime}<span>Läuft – halten</span>`;
+                startPrimingPoll(session);
+            } catch (error) {
+                if (current === session) clearPriming();
+                showToast(error.message, true);
+            }
+        };
+
+        buttons.forEach(button => {
+            button.addEventListener('pointerdown', event => {
+                event.preventDefault();
+                if (button.disabled) return;
+                button.setPointerCapture?.(event.pointerId);
+                void startPriming(button);
+            });
+            ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => button.addEventListener(type, () => releasePriming(button)));
+            button.addEventListener('keydown', event => {
+                if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
+                    event.preventDefault();
+                    void startPriming(button);
+                }
+            });
+            button.addEventListener('keyup', event => {
+                if (event.key === ' ' || event.key === 'Enter') {
+                    event.preventDefault();
+                    releasePriming(button);
+                }
+            });
+        });
+    }
+
     function dataRow(title, subtitle, id, status = null) {
         const statusTag = status ? `<span class="status-tag ${status.isOff ? 'off' : ''}">${escapeHtml(status.label)}</span>` : '';
         return `<article class="data-row"><div class="data-row-main"><div class="data-row-heading"><strong>${escapeHtml(title)}</strong>${statusTag}</div><span class="data-row-subtitle">${escapeHtml(subtitle)}</span></div><div class="row-actions"><button type="button" data-edit="${id}" aria-label="${escapeHtml(title)} bearbeiten">${icons.edit}</button><button type="button" class="delete" data-delete="${id}" aria-label="${escapeHtml(title)} löschen">${icons.trash}</button></div></article>`;
+    }
+
+    function pumpDataRow(pump) {
+        const status = `<span class="status-tag ${pump.isEnabled ? '' : 'off'}">${pump.isEnabled ? 'Aktiv' : 'Deaktiviert'}</span>`;
+        const subtitle = `GPIO ${pump.gpioPin} · ${formatFlowRate(pump.flowRateMlPerSecond)} ml/s · ${pump.ingredientName || 'Keine Zutat'}`;
+        const disabled = pump.isEnabled ? '' : 'disabled';
+        const title = pump.isEnabled ? `${pump.name} gedrückt halten, um den Schlauch zu füllen` : `${pump.name} ist deaktiviert`;
+        return `<article class="data-row pump-data-row"><div class="data-row-main"><div class="data-row-heading"><strong>${escapeHtml(pump.name)}</strong>${status}</div><span class="data-row-subtitle">${escapeHtml(subtitle)}</span></div><div class="row-actions"><button type="button" class="prime-pump-button" data-prime="${pump.id}" data-enabled="${pump.isEnabled}" ${disabled} title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${icons.prime}<span>Füllen</span></button><button type="button" data-edit="${pump.id}" aria-label="${escapeHtml(pump.name)} bearbeiten">${icons.edit}</button><button type="button" class="delete" data-delete="${pump.id}" aria-label="${escapeHtml(pump.name)} löschen">${icons.trash}</button></div></article>`;
     }
 
     function dialogFormActions() { return '<div class="form-field full form-actions"><button type="button" class="secondary-button" data-dialog-close>Abbrechen</button><button type="submit" class="primary-button">Speichern</button></div>'; }
@@ -653,8 +1017,10 @@
 
     function clearTimers() {
         clearInterval(state.pollTimer);
+        clearInterval(state.primingPollTimer);
         clearTimeout(state.completionTimer);
         state.pollTimer = null;
+        state.primingPollTimer = null;
         state.completionTimer = null;
     }
 
