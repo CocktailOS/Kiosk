@@ -53,7 +53,7 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
         Detail = status switch
         {
             StatusCodes.Status400BadRequest => "Der Anfrageinhalt ist kein gültiges UTF-8-JSON.",
-            StatusCodes.Status409Conflict => "Name, GPIO-Pin, Volumen oder Zuordnung ist bereits vergeben oder wird noch verwendet.",
+            StatusCodes.Status409Conflict => "Name, gpio-Pin, Volumen oder Zuordnung ist bereits vergeben oder wird noch verwendet.",
             _ => "Die Anfrage konnte nicht verarbeitet werden. Details wurden protokolliert."
         }
     });

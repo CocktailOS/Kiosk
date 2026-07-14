@@ -37,8 +37,32 @@
         plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
         clean: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3S6.5 9.1 6.5 14a5.5 5.5 0 0 0 11 0C17.5 9.1 12 3 12 3Z"/><path d="M9.4 15.2a2.8 2.8 0 0 0 2.8 2.2"/></svg>',
         prime: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 20V8.5a6 6 0 0 1 12 0V20"/><path d="M3 20h18M9 12h6M12 4v8"/><path d="M12 16v2"/></svg>',
+        raspberryPi: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 8h8v8H8zM2 9h2M2 15h2M20 9h2M20 15h2M9 2v2M15 2v2M9 20v2M15 20v2"/></svg>',
         download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>'
     };
+
+    const raspberryPiHeader = [
+        [{ board: 1, label: '3v3' }, { board: 2, label: '5v' }],
+        [{ board: 3, bcm: 2 }, { board: 4, label: '5v' }],
+        [{ board: 5, bcm: 3 }, { board: 6, label: 'gnd' }],
+        [{ board: 7, bcm: 4 }, { board: 8, bcm: 14 }],
+        [{ board: 9, label: 'gnd' }, { board: 10, bcm: 15 }],
+        [{ board: 11, bcm: 17 }, { board: 12, bcm: 18 }],
+        [{ board: 13, bcm: 27 }, { board: 14, label: 'gnd' }],
+        [{ board: 15, bcm: 22 }, { board: 16, bcm: 23 }],
+        [{ board: 17, label: '3v3' }, { board: 18, bcm: 24 }],
+        [{ board: 19, bcm: 10 }, { board: 20, label: 'gnd' }],
+        [{ board: 21, bcm: 9 }, { board: 22, bcm: 25 }],
+        [{ board: 23, bcm: 11 }, { board: 24, bcm: 8 }],
+        [{ board: 25, label: 'gnd' }, { board: 26, bcm: 7 }],
+        [{ board: 27, bcm: 0 }, { board: 28, bcm: 1 }],
+        [{ board: 29, bcm: 5 }, { board: 30, label: 'gnd' }],
+        [{ board: 31, bcm: 6 }, { board: 32, bcm: 12 }],
+        [{ board: 33, bcm: 13 }, { board: 34, label: 'gnd' }],
+        [{ board: 35, bcm: 19 }, { board: 36, bcm: 16 }],
+        [{ board: 37, bcm: 26 }, { board: 38, bcm: 20 }],
+        [{ board: 39, label: 'gnd' }, { board: 40, bcm: 21 }]
+    ];
 
     document.addEventListener('DOMContentLoaded', initialize);
     window.addEventListener('hashchange', renderRoute);
@@ -307,22 +331,47 @@
             renderSettings();
         }));
         app.querySelector('[data-theme-toggle]').addEventListener('click', () => setTheme(nextTheme));
-        app.querySelector('[data-app-update]')?.addEventListener('click', startApplicationUpdate);
+        app.querySelector('[data-app-update]')?.addEventListener('click', openApplicationUpdateDialog);
         renderActiveSettingsTab();
     }
 
-    async function startApplicationUpdate() {
+    function openApplicationUpdateDialog() {
+        const version = state.update?.latestVersion;
+        if (!version) return;
+        const layer = createSettingsDialog('update-confirmation-dialog');
+        const content = `<p class="update-dialog-copy">Version <strong>${escapeHtml(version)}</strong> wird heruntergeladen und installiert. Die App startet danach automatisch neu.</p><div class="form-actions"><button type="button" class="secondary-button" data-dialog-close>Abbrechen</button><button type="button" class="primary-button confirm-app-update">Update installieren</button></div>`;
+        setSettingsDialogContent(layer, 'Update installieren?', 'Die Bedienung ist während der Aktualisierung kurz nicht verfügbar.', content);
+        layer.querySelector('.confirm-app-update').addEventListener('click', () => {
+            closeLayer(layer);
+            startApplicationUpdate(showApplicationUpdateProgress(version));
+        });
+    }
+
+    function showApplicationUpdateProgress(version) {
+        const layer = createSettingsDialog('update-progress-dialog', { dismissible: false });
+        const content = `<div class="update-progress" aria-live="polite"><div class="update-spinner" aria-hidden="true"></div><div><h3>Update läuft</h3><p>Version <strong>${escapeHtml(version)}</strong> wird installiert. Die App startet danach automatisch neu.</p><span>Bitte dieses Fenster geöffnet lassen.</span></div></div>`;
+        setSettingsDialogContent(layer, 'Update wird vorbereitet', '', content, { showClose: false });
+        const dialog = layer.querySelector('.settings-dialog');
+        dialog.tabIndex = -1;
+        requestAnimationFrame(() => dialog.focus());
+        return layer;
+    }
+
+    async function startApplicationUpdate(progressLayer) {
         const button = app.querySelector('[data-app-update]');
-        if (!button) return;
-        button.disabled = true;
-        button.classList.add('is-updating');
+        if (button) {
+            button.disabled = true;
+            button.classList.add('is-updating');
+        }
         try {
-            const update = await api('/api/app-update', { method: 'POST' });
-            showToast(`Update auf ${update.version} wird installiert. Die App startet danach automatisch neu.`);
+            await api('/api/app-update', { method: 'POST' });
             waitForUpdatedApplication();
         } catch (error) {
-            button.disabled = false;
-            button.classList.remove('is-updating');
+            closeLayer(progressLayer);
+            if (button) {
+                button.disabled = false;
+                button.classList.remove('is-updating');
+            }
             showToast(error.message, true);
         }
     }
@@ -519,7 +568,7 @@
 
     function renderPumpSettings(main) {
         const list = state.pumps.map(pumpDataRow).join('');
-        main.innerHTML = settingsListTemplate('Pumpen', 'GPIO, Förderrate und zugeordnete Zutaten verwalten.', 'Pumpe anlegen', list || emptyList('Noch keine Pumpen vorhanden.'));
+        main.innerHTML = settingsListTemplate('Pumpen', 'gpio, Förderrate und zugeordnete Zutaten verwalten.', 'Pumpe anlegen', list || emptyList('Noch keine Pumpen vorhanden.'));
         const cleaningButton = document.createElement('button');
         cleaningButton.type = 'button';
         cleaningButton.className = 'secondary-button cleaning-mode-button';
@@ -540,8 +589,43 @@
         state.editing = id;
         const flowRate = Math.round(Number(item?.flowRateMlPerSecond ?? 10) * 10) / 10;
         const flowMaximum = Math.max(100, Math.ceil(flowRate / 10) * 10);
-        const form = `<form id="entity-form" class="form-grid"><div class="form-field full"><label for="pump-name">Name</label><input id="pump-name" name="name" required maxlength="100" value="${escapeHtml(item?.name || '')}"></div><div class="form-field full"><label for="gpio-pin">GPIO-Pin</label><input id="gpio-pin" name="gpioPin" type="number" min="0" max="40" required inputmode="numeric" value="${item?.gpioPin ?? ''}"></div>${valueSliderField('flow-rate', 'flowRate', 'Förderrate', 'ml/s', .1, flowMaximum, .1, flowRate, true)}<div class="form-field full"><label for="pump-ingredient">Zutat</label><select id="pump-ingredient" name="ingredientId"><option value="">Keine Zuordnung</option>${optionList(state.ingredients, item?.ingredientId, x => x.name)}</select></div><div class="form-field full checkbox-row"><label class="checkbox-field"><input name="activeHigh" type="checkbox" ${item?.activeHigh ? 'checked' : ''}> Relais ist active HIGH</label><label class="checkbox-field"><input name="isEnabled" type="checkbox" ${item ? (item.isEnabled ? 'checked' : '') : 'checked'}> Pumpe ist aktiviert</label></div>${dialogFormActions()}</form>`;
-        openSimpleEditorDialog(item ? 'Pumpe bearbeiten' : 'Pumpe anlegen', 'Maximal 8 Pumpen. Förderrate bitte vorher kalibrieren.', form, 'pumps', 'Pumpe', formElement => ({ name: formElement.elements.name.value, gpioPin: Number(formElement.elements.gpioPin.value), flowRateMlPerSecond: Number(formElement.elements.flowRate.value), activeHigh: formElement.elements.activeHigh.checked, isEnabled: formElement.elements.isEnabled.checked, ingredientId: formElement.elements.ingredientId.value ? Number(formElement.elements.ingredientId.value) : null }));
+        const form = `<form id="entity-form" class="form-grid"><div class="form-field full"><label for="pump-name">Name</label><input id="pump-name" name="name" required maxlength="100" value="${escapeHtml(item?.name || '')}"></div><div class="form-field full"><label for="gpio-pin">gpio-pin</label><div class="gpio-input-control"><input id="gpio-pin" name="gpioPin" type="number" min="0" max="40" required inputmode="numeric" value="${item?.gpioPin ?? ''}"><button type="button" class="gpio-map-trigger" aria-label="Raspberry-Pi-Pinbelegung öffnen" title="Raspberry-Pi-Pinbelegung öffnen">${icons.raspberryPi}</button></div></div>${valueSliderField('flow-rate', 'flowRate', 'Förderrate', 'ml/s', .1, flowMaximum, .1, flowRate, true)}<div class="form-field full"><label for="pump-ingredient">Zutat</label><select id="pump-ingredient" name="ingredientId"><option value="">Keine Zuordnung</option>${optionList(state.ingredients, item?.ingredientId, x => x.name)}</select></div><div class="form-field full checkbox-row"><label class="checkbox-field"><input name="activeHigh" type="checkbox" ${item?.activeHigh ? 'checked' : ''}> Relais ist active high</label><label class="checkbox-field"><input name="isEnabled" type="checkbox" ${item ? (item.isEnabled ? 'checked' : '') : 'checked'}> Pumpe ist aktiviert</label></div>${dialogFormActions()}</form>`;
+        const layer = openSimpleEditorDialog(item ? 'Pumpe bearbeiten' : 'Pumpe anlegen', 'Maximal 8 Pumpen. Förderrate bitte vorher kalibrieren.', form, 'pumps', 'Pumpe', formElement => ({ name: formElement.elements.name.value, gpioPin: Number(formElement.elements.gpioPin.value), flowRateMlPerSecond: Number(formElement.elements.flowRate.value), activeHigh: formElement.elements.activeHigh.checked, isEnabled: formElement.elements.isEnabled.checked, ingredientId: formElement.elements.ingredientId.value ? Number(formElement.elements.ingredientId.value) : null }));
+        layer.querySelector('.gpio-map-trigger').addEventListener('click', () => openGpioPinMap(layer.querySelector('#gpio-pin'), item?.id ?? null));
+    }
+
+    function openGpioPinMap(pinInput, currentPumpId) {
+        const usesBoardNumbering = state.system?.pinNumberingScheme === 'Board';
+        const occupiedPins = new Set(state.pumps.filter(pump => pump.id !== currentPumpId).map(pump => pump.gpioPin));
+        const selectedPin = pinInput.value === '' ? null : Number(pinInput.value);
+        const pinLabel = pin => usesBoardNumbering ? `Pin ${pin.board}` : `gpio ${pin.bcm}`;
+        const pinDescription = pin => `Pin ${pin.board} · gpio ${pin.bcm}`;
+        const pinMarkup = pin => {
+            if (!Number.isInteger(pin.bcm)) return `<div class="gpio-header-pin is-disabled" aria-label="Pin ${pin.board}: ${pin.label}, nicht als gpio nutzbar"><strong>Pin ${pin.board}</strong><span>${pin.label}</span></div>`;
+            const configuredPin = usesBoardNumbering ? pin.board : pin.bcm;
+            const occupied = occupiedPins.has(configuredPin);
+            const selected = selectedPin === configuredPin;
+            return `<button type="button" class="gpio-header-pin is-gpio ${selected ? 'is-selected' : ''}" data-gpio-select data-gpio-pin="${configuredPin}" ${occupied ? 'disabled' : ''} aria-label="${pinDescription(pin)}${occupied ? ', bereits belegt' : ''}" title="${pinDescription(pin)}"><strong>${pinLabel(pin)}</strong><span>${usesBoardNumbering ? `gpio ${pin.bcm}` : `Pin ${pin.board}`}</span></button>`;
+        };
+        const headerRows = [
+            raspberryPiHeader.map(pair => pinMarkup(pair[0])).join(''),
+            raspberryPiHeader.map(pair => pinMarkup(pair[1])).join('')
+        ].join('');
+        const layer = createSettingsDialog('gpio-map-dialog');
+        layer.classList.add('gpio-map-layer');
+        layer.dataset.preserveEditing = 'true';
+        const numberingLabel = usesBoardNumbering ? 'Physische Pin-Nummerierung (Board)' : 'bcm / logische gpio-Nummerierung';
+        const selectedDescription = selectedPin === null ? 'Noch kein Pin ausgewählt' : `Ausgewählt: ${usesBoardNumbering ? `Pin ${selectedPin}` : `gpio ${selectedPin}`}`;
+        const body = `<div class="gpio-map-intro"><div><span class="gpio-map-kicker">Raspberry Pi · 40-Pin-Header</span><strong>${escapeHtml(numberingLabel)}</strong><p>Nur gpio-Pins sind auswählbar. gnd, 3v3 und 5v sind deaktiviert; bereits zugeordnete gpio-Pins ebenfalls.</p></div><div class="gpio-map-selected" data-gpio-selected>${escapeHtml(selectedDescription)}</div></div><div class="gpio-header-shell" role="group" aria-label="Pinbelegung des Raspberry Pi 40-Pin-Headers"><div class="gpio-header-labels"><span>Obere Reihe · ungerade Pins (1 → 39)</span><span>Untere Reihe · gerade Pins (2 → 40)</span></div><div class="gpio-header-grid">${headerRows}</div></div>`;
+        setSettingsDialogContent(layer, 'gpio-Pin auswählen', 'Die Auswahl wird direkt in die Pumpenkonfiguration übernommen.', body);
+        layer.querySelectorAll('[data-gpio-select]').forEach(button => button.addEventListener('click', () => {
+            const value = Number(button.dataset.gpioPin);
+            pinInput.value = String(value);
+            pinInput.dispatchEvent(new Event('input', { bubbles: true }));
+            pinInput.dispatchEvent(new Event('change', { bubbles: true }));
+            layer.querySelectorAll('[data-gpio-select]').forEach(candidate => candidate.classList.toggle('is-selected', candidate === button));
+            layer.querySelector('[data-gpio-selected]').textContent = `Ausgewählt: ${usesBoardNumbering ? `Pin ${value}` : `gpio ${value}`}`;
+        }));
     }
 
     function openPrimingDialog() {
@@ -551,7 +635,7 @@
             return;
         }
 
-        const pumpOptions = activePumps.map(pump => `<label class="priming-pump-option"><input type="radio" name="primingPump" value="${pump.id}"><span><strong>${escapeHtml(pump.name)}</strong><small>GPIO ${pump.gpioPin} · ${escapeHtml(pump.ingredientName || 'Keine Zutat')}</small></span></label>`).join('');
+        const pumpOptions = activePumps.map(pump => `<label class="priming-pump-option"><input type="radio" name="primingPump" value="${pump.id}"><span><strong>${escapeHtml(pump.name)}</strong><small>gpio ${pump.gpioPin} · ${escapeHtml(pump.ingredientName || 'Keine Zutat')}</small></span></label>`).join('');
         const layer = document.createElement('div');
         layer.className = 'modal-layer settings-dialog-layer';
         layer.returnFocus = document.activeElement;
@@ -698,7 +782,7 @@
             return;
         }
 
-        const pumpOptions = activePumps.map(pump => `<label class="cleaning-pump-option"><input type="checkbox" name="pumpId" value="${pump.id}" checked><span><strong>${escapeHtml(pump.name)}</strong><small>GPIO ${pump.gpioPin} · ${escapeHtml(pump.ingredientName || 'Keine Zutat')}</small></span></label>`).join('');
+        const pumpOptions = activePumps.map(pump => `<label class="cleaning-pump-option"><input type="checkbox" name="pumpId" value="${pump.id}" checked><span><strong>${escapeHtml(pump.name)}</strong><small>gpio ${pump.gpioPin} · ${escapeHtml(pump.ingredientName || 'Keine Zutat')}</small></span></label>`).join('');
         const layer = createSettingsDialog('settings-dialog-wide cleaning-dialog');
         const body = `<form id="cleaning-form"><div class="cleaning-note"><strong>Vor dem Start</strong><span>Zuläufe in die geeignete Reinigungsflüssigkeit und Ausläufe sicher in einen Auffangbehälter legen.</span></div><fieldset class="cleaning-pump-fieldset"><legend>Aktive Pumpen auswählen</legend><button type="button" class="small-action cleaning-toggle-all">Alle abwählen</button><div class="cleaning-pump-grid">${pumpOptions}</div></fieldset>${valueSliderField('cleaning-duration', 'durationSeconds', 'Laufzeit', 'Sek.', 5, 300, 5, 30)}<div class="form-actions"><button type="button" class="secondary-button" data-dialog-close>Abbrechen</button><button type="submit" class="primary-button start-cleaning">${icons.clean} Reinigung starten</button></div></form>`;
         setSettingsDialogContent(layer, 'Pumpen reinigen', 'Ausgewählte Pumpen laufen gleichzeitig und stoppen automatisch.', body);
@@ -787,7 +871,7 @@
 
     function renderSystemSettings(main) {
         const config = state.system;
-        main.innerHTML = `<section class="settings-card system-hero"><h2>Hardwaresteuerung</h2><p class="card-intro">Der Dummy-Treiber simuliert Pumpen. GPIO steuert die angeschlossenen Relais auf dem Raspberry Pi.</p><form id="system-form"><div class="system-options"><div><span class="field-label">Pumpentreiber</span><label class="option-card"><input type="radio" name="pumpDriver" value="Dummy" ${config.pumpDriver === 'Dummy' ? 'checked' : ''}><strong>Dummy</strong><span>Sicher testen, ohne GPIO-Ausgänge zu schalten.</span></label><label class="option-card" style="margin-top:10px"><input type="radio" name="pumpDriver" value="Gpio" ${config.pumpDriver === 'Gpio' ? 'checked' : ''}><strong>Raspberry Pi GPIO</strong><span>Steuert reale Relais über System.Device.Gpio.</span></label></div><div><span class="field-label">Pin-Nummerierung</span><label class="option-card"><input type="radio" name="pinNumberingScheme" value="Logical" ${config.pinNumberingScheme === 'Logical' ? 'checked' : ''}><strong>Logical / BCM</strong><span>GPIO-Nummern, beispielsweise GPIO17.</span></label><label class="option-card" style="margin-top:10px"><input type="radio" name="pinNumberingScheme" value="Board" ${config.pinNumberingScheme === 'Board' ? 'checked' : ''}><strong>Board / physisch</strong><span>Positionen 1 bis 40 auf dem Raspberry-Pi-Header.</span></label></div></div><div class="system-note">High/Low wird für jede Pumpe einzeln konfiguriert. Bei active Low bleibt der Ausgang im Ruhezustand High und wird zum Pumpen Low geschaltet.</div><div class="form-actions"><button class="primary-button" type="submit">Hardwarekonfiguration speichern</button></div></form></section>`;
+        main.innerHTML = `<section class="settings-card system-hero"><h2>Hardwaresteuerung</h2><p class="card-intro">Der Dummy-Treiber simuliert Pumpen. gpio steuert die angeschlossenen Relais auf dem Raspberry Pi.</p><form id="system-form"><div class="system-options"><div><span class="field-label">Pumpentreiber</span><label class="option-card"><input type="radio" name="pumpDriver" value="Dummy" ${config.pumpDriver === 'Dummy' ? 'checked' : ''}><strong>Dummy</strong><span>Sicher testen, ohne gpio-Ausgänge zu schalten.</span></label><label class="option-card" style="margin-top:10px"><input type="radio" name="pumpDriver" value="Gpio" ${config.pumpDriver === 'Gpio' ? 'checked' : ''}><strong>Raspberry Pi gpio</strong><span>Steuert reale Relais über System.Device.Gpio.</span></label></div><div><span class="field-label">Pin-Nummerierung</span><label class="option-card"><input type="radio" name="pinNumberingScheme" value="Logical" ${config.pinNumberingScheme === 'Logical' ? 'checked' : ''}><strong>Logical / bcm</strong><span>gpio-Nummern, beispielsweise gpio17.</span></label><label class="option-card" style="margin-top:10px"><input type="radio" name="pinNumberingScheme" value="Board" ${config.pinNumberingScheme === 'Board' ? 'checked' : ''}><strong>Board / physisch</strong><span>Positionen 1 bis 40 auf dem Raspberry-Pi-Header.</span></label></div></div><div class="system-note">High/Low wird für jede Pumpe einzeln konfiguriert. Bei active Low bleibt der Ausgang im Ruhezustand High und wird zum Pumpen Low geschaltet.</div><div class="form-actions"><button class="primary-button" type="submit">Hardwarekonfiguration speichern</button></div></form></section>`;
         main.querySelector('#system-form').addEventListener('submit', async event => {
             event.preventDefault();
             const form = event.currentTarget;
@@ -803,15 +887,16 @@
         return `<div class="settings-list-view"><div class="settings-list-header"><div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(intro)}</p></div><div class="settings-header-actions"><button type="button" class="primary-button add-entity">${icons.plus} ${escapeHtml(addLabel)}</button></div></div><section class="settings-card list-card"><div class="data-list">${content}</div></section></div>`;
     }
 
-    function createSettingsDialog(className = '') {
+    function createSettingsDialog(className = '', options = {}) {
+        const dismissible = options.dismissible !== false;
         const layer = document.createElement('div');
         layer.className = 'modal-layer settings-dialog-layer';
         layer.innerHTML = `<div class="modal-scrim"></div><section class="settings-dialog ${className}" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title"><div class="settings-dialog-content"></div></section>`;
         layer.returnFocus = document.activeElement;
         app.append(layer);
-        layer.querySelector('.modal-scrim').addEventListener('click', () => dismissSettingsDialog(layer));
+        if (dismissible) layer.querySelector('.modal-scrim').addEventListener('click', () => dismissSettingsDialog(layer));
         layer.addEventListener('keydown', event => {
-            if (event.key === 'Escape') dismissSettingsDialog(layer);
+            if (dismissible && event.key === 'Escape') dismissSettingsDialog(layer);
             if (event.key !== 'Tab') return;
             const focusable = [...layer.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])')];
             if (!focusable.length) return;
@@ -824,8 +909,9 @@
         return layer;
     }
 
-    function setSettingsDialogContent(layer, title, intro, body) {
-        layer.querySelector('.settings-dialog-content').innerHTML = `<header class="settings-dialog-header"><div><h2 id="settings-dialog-title">${escapeHtml(title)}</h2>${intro ? `<p>${escapeHtml(intro)}</p>` : ''}</div><button type="button" class="icon-button" data-dialog-close aria-label="Dialog schließen">${icons.close}</button></header><div class="settings-dialog-body">${body}</div>`;
+    function setSettingsDialogContent(layer, title, intro, body, options = {}) {
+        const closeButton = options.showClose === false ? '' : `<button type="button" class="icon-button" data-dialog-close aria-label="Dialog schließen">${icons.close}</button>`;
+        layer.querySelector('.settings-dialog-content').innerHTML = `<header class="settings-dialog-header"><div><h2 id="settings-dialog-title">${escapeHtml(title)}</h2>${intro ? `<p>${escapeHtml(intro)}</p>` : ''}</div>${closeButton}</header><div class="settings-dialog-body">${body}</div>`;
         layer.querySelectorAll('[data-dialog-close]').forEach(button => button.addEventListener('click', () => dismissSettingsDialog(layer)));
         if (!layer.dataset.focused) {
             layer.dataset.focused = 'true';
@@ -836,8 +922,10 @@
     function dismissSettingsDialog(layer) {
         if (!layer?.isConnected) return;
         const returnFocus = layer.returnFocus;
-        state.editing = null;
-        state.cocktailDraft = null;
+        if (!layer.dataset.preserveEditing) {
+            state.editing = null;
+            state.cocktailDraft = null;
+        }
         closeLayer(layer);
         setTimeout(() => { if (returnFocus?.isConnected) returnFocus.focus(); }, 180);
     }
@@ -854,6 +942,7 @@
             const saved = await saveEntity(resource, state.editing, createPayload(form), label);
             if (!saved && submit.isConnected) submit.disabled = false;
         });
+        return layer;
     }
 
     function openDeleteDialog(resource, id, label, name) {
@@ -1015,7 +1104,7 @@
 
     function pumpDataRow(pump) {
         const status = `<span class="status-tag ${pump.isEnabled ? '' : 'off'}">${pump.isEnabled ? 'Aktiv' : 'Deaktiviert'}</span>`;
-        const subtitle = `GPIO ${pump.gpioPin} · ${formatFlowRate(pump.flowRateMlPerSecond)} ml/s · ${pump.ingredientName || 'Keine Zutat'}`;
+        const subtitle = `gpio ${pump.gpioPin} · ${formatFlowRate(pump.flowRateMlPerSecond)} ml/s · ${pump.ingredientName || 'Keine Zutat'}`;
         const disabled = pump.isEnabled ? '' : 'disabled';
         const title = pump.isEnabled ? `${pump.name} gedrückt halten, um den Schlauch zu füllen` : `${pump.name} ist deaktiviert`;
         return `<article class="data-row pump-data-row"><div class="data-row-main"><div class="data-row-heading"><strong>${escapeHtml(pump.name)}</strong>${status}</div><span class="data-row-subtitle">${escapeHtml(subtitle)}</span></div><div class="row-actions"><button type="button" class="prime-pump-button" data-prime="${pump.id}" data-enabled="${pump.isEnabled}" ${disabled} title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${icons.prime}<span>Füllen</span></button><button type="button" data-edit="${pump.id}" aria-label="${escapeHtml(pump.name)} bearbeiten">${icons.edit}</button><button type="button" class="delete" data-delete="${pump.id}" aria-label="${escapeHtml(pump.name)} löschen">${icons.trash}</button></div></article>`;

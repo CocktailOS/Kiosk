@@ -9,7 +9,7 @@ public sealed class DummyPumpOutput(ILogger<DummyPumpOutput> logger) : IPumpOutp
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_sync) { if (isOn) _activePumps.Add(channel.PumpId); else _activePumps.Remove(channel.PumpId); }
-        logger.LogInformation("Dummy-Pumpe {PumpName} (GPIO {GpioPin}, {Polarity}) ist {State}", channel.Name, channel.GpioPin, channel.ActiveHigh ? "active HIGH" : "active LOW", isOn ? "AN" : "AUS");
+        logger.LogInformation("Dummy-Pumpe {PumpName} (gpio {GpioPin}, {Polarity}) ist {State}", channel.Name, channel.GpioPin, channel.ActiveHigh ? "active high" : "active low", isOn ? "an" : "aus");
         return ValueTask.CompletedTask;
     }
 

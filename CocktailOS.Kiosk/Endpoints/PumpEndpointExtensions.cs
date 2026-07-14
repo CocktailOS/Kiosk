@@ -48,10 +48,14 @@ public static class PumpEndpointExtensions
     private static async Task<IResult?> ValidateAsync(PumpWriteRequest request, int? pumpId, AppDbContext db, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 100) return EndpointResults.Validation("name", "Der Name muss zwischen 1 und 100 Zeichen lang sein.");
-        if (request.GpioPin is < 0 or > 40) return EndpointResults.Validation("gpioPin", "Der GPIO-Pin muss zwischen 0 und 40 liegen.");
+        var configuration = await db.MachineConfigurations.AsNoTracking().SingleAsync(x => x.Id == MachineConfiguration.SingletonId, ct);
+        if (!RaspberryPiHeaderPins.IsConfigurablePin(configuration.PinNumberingScheme, request.GpioPin))
+            return EndpointResults.Validation("gpioPin", configuration.PinNumberingScheme.Equals(PinNumberingSchemes.Board, StringComparison.OrdinalIgnoreCase)
+                ? "Der ausgewählte Pin ist kein gpio-Pin des physischen 40-Pin-Headers."
+                : "Der gpio-Pin muss zwischen 0 und 27 liegen.");
         if (request.FlowRateMlPerSecond is <= 0 or > 1000) return EndpointResults.Validation("flowRateMlPerSecond", "Die Förderrate muss größer als 0 und höchstens 1000 ml/s sein.");
         if (request.IngredientId is not null && !await db.Ingredients.AnyAsync(x => x.Id == request.IngredientId, ct)) return EndpointResults.Validation("ingredientId", "Die ausgewählte Zutat existiert nicht.");
-        if (await db.Pumps.AnyAsync(x => x.Id != pumpId && x.GpioPin == request.GpioPin, ct)) return EndpointResults.Validation("gpioPin", "Dieser GPIO-Pin ist bereits einer anderen Pumpe zugeordnet.");
+        if (await db.Pumps.AnyAsync(x => x.Id != pumpId && x.GpioPin == request.GpioPin, ct)) return EndpointResults.Validation("gpioPin", "Dieser gpio-Pin ist bereits einer anderen Pumpe zugeordnet.");
         return request.IngredientId is not null && await db.Pumps.AnyAsync(x => x.Id != pumpId && x.IngredientId == request.IngredientId, ct)
             ? EndpointResults.Validation("ingredientId", "Diese Zutat ist bereits einer anderen Pumpe zugeordnet.") : null;
     }
