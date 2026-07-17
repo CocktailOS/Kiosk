@@ -10,6 +10,10 @@ CocktailOS Kiosk ist eine .NET-10-Minimal-API mit einer für einen 7-Zoll-Touchs
 - Animierter Ausschank mit Fortschritt, Stopp-Schaltfläche und Erfolgsrückmeldung
 - Reinigungsmodus für frei wählbare aktive Pumpen mit einstellbarer Laufzeit und Sofort-Stopp
 - Vorbereitungsmodus direkt pro Pumpe zum Befüllen der Schläuche: Taste gedrückt halten, beim Loslassen sofort stoppen
+- Geführte Pumpenkalibrierung mit optionalem Vorfüllen, sicherem 10-Sekunden-Messlauf und bis zu drei Kontrollmessungen
+- Vorratsverwaltung mit Flaschengröße, Restmenge, Auffüllen-Aktion und Warnung bei niedrigem Bestand
+- Größenabhängige Cocktail-Verfügbarkeit; nicht ausreichende Bestände blockieren den Ausschank
+- Automatischer Bestandsabzug nach vollständigem Ausschank und anteilig anhand der realen Pumpenlaufzeit bei Abbruch
 - Verwaltung von Cocktails, Zutaten, Pumpen, Größen und Systemkonfiguration in Dialogen
 - Bis zu acht parallele Pumpen
 - Je Pumpe konfigurierbare GPIO-Nummer, Förderrate und active-HIGH-/active-LOW-Relaislogik
@@ -51,31 +55,19 @@ Die Anwendung ist anschließend standardmäßig unter `http://localhost:5276` er
 
 ## Installation auf dem Raspberry Pi
 
-Das Installationsskript lädt die aktuelle ARM64-Release, prüft deren Prüfsumme, richtet den systemd-Dienst ein und erhält bei Updates die SQLite-Datenbank sowie hochgeladene Bilder. Für die Display-Modi wird der Bildschirm auf 1024 × 600 konfiguriert. Nach der ersten Installation ist ein Neustart erforderlich.
+Das Installationsskript lädt die aktuelle ARM64-Release, prüft deren Prüfsumme, richtet den systemd-Dienst ein und erhält bei Updates die SQLite-Datenbank sowie hochgeladene Bilder. Für den Displaybetrieb wird der Bildschirm auf 1024 × 600 konfiguriert. Nach der ersten Installation ist ein Neustart erforderlich.
 
-### Nur Netzwerkzugriff
+### Ohne angeschlossenes Display
 
-Startet ausschließlich die API; die Oberfläche ist im lokalen Netzwerk erreichbar.
+Startet ausschließlich die API. Der Netzwerkzugriff ist dabei direkt aktiviert.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --headless
 ```
 
-### Nur lokales Display
+### Displaybetrieb
 
-Startet die Oberfläche über Cage und Chromium auf dem angeschlossenen Bildschirm. Die API ist dabei nur lokal auf dem Raspberry Pi erreichbar.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --display
-```
-
-### Display und Netzwerkzugriff
-
-Startet die Oberfläche über Cage und Chromium auf dem Display und stellt die API zusätzlich im lokalen Netzwerk bereit.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --both
-```
+Ohne Option startet CocktailOS über Cage und Chromium auf dem angeschlossenen Bildschirm. Der Zugriff aus dem Netzwerk ist standardmäßig deaktiviert und kann später unter **Einstellungen → System → Netzwerkzugriff** aktiviert werden.
 
 Nach einer Installation mit Display bitte einmal neu starten:
 
@@ -131,7 +123,7 @@ Alle Routen beginnen mit `/api`.
 | Bereich | Routen |
 | --- | --- |
 | Cocktails | `GET /cocktails`, `GET /cocktails/{id}`, `POST /cocktails`, `PUT /cocktails/{id}`, `DELETE /cocktails/{id}` |
-| Zutaten | `GET /ingredients`, `POST /ingredients`, `PUT /ingredients/{id}`, `DELETE /ingredients/{id}` |
+| Zutaten | `GET /ingredients`, `POST /ingredients`, `PUT /ingredients/{id}`, `DELETE /ingredients/{id}`, `POST /ingredients/{id}/refill` |
 | Pumpen | `GET /pumps`, `POST /pumps`, `PUT /pumps/{id}`, `DELETE /pumps/{id}` |
 | Größen | `GET /sizes`, `POST /sizes`, `PUT /sizes/{id}`, `DELETE /sizes/{id}` |
 | System | `GET /system`, `PUT /system` |
@@ -139,6 +131,7 @@ Alle Routen beginnen mit `/api`.
 | Ausschank | `POST /dispenses`, `GET /dispenses/current`, `POST /dispenses/current/stop` |
 | Reinigung | `POST /cleaning`, `GET /cleaning/current`, `POST /cleaning/current/stop` |
 | Vorbereitung | `POST /priming`, `GET /priming/current`, `POST /priming/current/stop` |
+| Kalibrierung | `POST /calibrations`, `GET /calibrations/current`, `POST /calibrations/current/stop`, `PUT /pumps/{id}/calibration` |
 
 Beispiel für einen Ausschank:
 

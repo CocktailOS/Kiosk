@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="CocktailOS.Kiosk/CocktailOS.Kiosk.csproj" />
+  <Project Path="CocktailOS.Kiosk.Tests/CocktailOS.Kiosk.Tests.csproj" />
 </Solution>

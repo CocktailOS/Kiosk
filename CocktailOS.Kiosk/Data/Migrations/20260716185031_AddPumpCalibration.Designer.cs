@@ -3,6 +3,7 @@ using System;
 using CocktailOS.Kiosk.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CocktailOS.Kiosk.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260716185031_AddPumpCalibration")]
+    partial class AddPumpCalibration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.5");
@@ -103,22 +106,10 @@ namespace CocktailOS.Kiosk.Data.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("TEXT");
 
-                    b.Property<decimal>("BottleSizeMl")
-                        .ValueGeneratedOnAdd()
-                        .HasPrecision(8, 2)
-                        .HasColumnType("TEXT")
-                        .HasDefaultValue(1000m);
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
-
-                    b.Property<decimal>("RemainingVolumeMl")
-                        .ValueGeneratedOnAdd()
-                        .HasPrecision(8, 2)
-                        .HasColumnType("TEXT")
-                        .HasDefaultValue(1000m);
 
                     b.HasKey("Id");
 
@@ -133,15 +124,6 @@ namespace CocktailOS.Kiosk.Data.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
-
-                    b.Property<bool>("NetworkAccessEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(false);
-
-                    b.Property<string>("NetworkAccessPinHash")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("PinNumberingScheme")
                         .IsRequired()

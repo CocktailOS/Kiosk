@@ -1,2 +1,13 @@
 namespace CocktailOS.Kiosk.Contracts;
-public sealed record PumpResponse(int Id, string Name, int GpioPin, decimal FlowRateMlPerSecond, bool ActiveHigh, bool IsEnabled, int? IngredientId, string? IngredientName);
+public sealed record PumpResponse(
+    int Id,
+    string Name,
+    int GpioPin,
+    decimal FlowRateMlPerSecond,
+    bool ActiveHigh,
+    bool IsEnabled,
+    int? IngredientId,
+    string? IngredientName,
+    string FlowRateSource,
+    string CalibrationStatus,
+    DateTimeOffset? LastCalibratedAt);

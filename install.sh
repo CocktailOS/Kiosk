@@ -23,14 +23,12 @@ Aufruf:
   curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- [Optionen]
 
 Optionen:
-  --headless          Nur die API im Netzwerk bereitstellen.
-  --display           Cage-/Chromium-Kiosk auf dem angeschlossenen Display starten.
-  --both              Cage-/Chromium-Kiosk starten und die API zusätzlich im Netzwerk bereitstellen.
+  --headless          Ohne angeschlossenes Display installieren.
   --tag TAG           Eine bestimmte Release-Version installieren.
   --stable            Vorabversionen beim automatischen Update ignorieren.
   -h, --help          Diese Hilfe anzeigen.
 
-Ohne Modus-Option wird eine vorhandene Moduswahl beibehalten, ansonsten --display verwendet.
+Ohne Option startet CocktailOS auf dem angeschlossenen Display. Netzwerkzugriff wird später direkt in den Systemeinstellungen aktiviert.
 USAGE
 }
 
@@ -39,7 +37,7 @@ fail() { printf '[cocktailos-kiosk] FEHLER: %s\n' "$*" >&2; exit 1; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --headless|--display|--both)
+    --headless)
       [[ -z "$MODE" ]] || fail "Nur ein Betriebsmodus ist erlaubt."
       MODE="${1#--}"
       shift
@@ -196,11 +194,11 @@ install_base_packages
 
 ENV_FILE="/etc/default/${SERVICE_NAME}"
 if [[ -z "$MODE" && -f "$ENV_FILE" ]]; then
-  MODE="$(sed -n -E 's/^COCKTAILOS_MODE=(headless|display|both)$/\1/p' "$ENV_FILE" | tail -n 1)"
+  MODE="$(sed -n -E 's/^COCKTAILOS_MODE=headless$/headless/p' "$ENV_FILE" | tail -n 1)"
 fi
 MODE="${MODE:-display}"
 
-if [[ "$MODE" == "display" || "$MODE" == "both" ]]; then
+if [[ "$MODE" == "display" ]]; then
   install_display_packages
   configure_display
 fi
@@ -253,15 +251,16 @@ chown -R root:root "$INSTALL_ROOT"
 chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "$DATA_ROOT"
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 
-if [[ "$MODE" == "headless" || "$MODE" == "both" ]]; then
-  APP_URL="http://0.0.0.0:${PORT}"
-else
-  APP_URL="http://127.0.0.1:${PORT}"
+APP_URL="http://0.0.0.0:${PORT}"
+NETWORK_ACCESS_DEFAULT="false"
+if [[ "$MODE" == "headless" ]]; then
+  NETWORK_ACCESS_DEFAULT="true"
 fi
 
 cat > "$ENV_FILE" <<ENVIRONMENT
 # Managed by CocktailOS Kiosk install.sh.
 COCKTAILOS_MODE=${MODE}
+COCKTAILOS_NETWORK_ACCESS_DEFAULT=${NETWORK_ACCESS_DEFAULT}
 ENVIRONMENT
 chmod 0644 "$ENV_FILE"
 
@@ -318,7 +317,7 @@ KIOSK_SERVICE_FILE="/etc/systemd/system/${KIOSK_SERVICE_NAME}.service"
 KIOSK_SCRIPT="/usr/local/lib/cocktailos-kiosk/cage-session"
 LEGACY_DISPLAY_SERVICE_NAME="${SERVICE_NAME}-display"
 LEGACY_DISPLAY_SERVICE_FILE="/etc/systemd/system/${LEGACY_DISPLAY_SERVICE_NAME}.service"
-if [[ "$MODE" == "display" || "$MODE" == "both" ]]; then
+if [[ "$MODE" == "display" ]]; then
   install -d -m 0755 /usr/local/lib/cocktailos-kiosk
   install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "${DATA_ROOT}/runtime" "${DATA_ROOT}/browser"
   if [[ -f /etc/X11/Xwrapper.config ]] && grep -q 'Managed by CocktailOS Kiosk install.sh.' /etc/X11/Xwrapper.config; then
@@ -399,7 +398,7 @@ log "Aktiviere Dienste (${MODE})"
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
 systemctl restart "$SERVICE_NAME"
-if [[ "$MODE" == "display" || "$MODE" == "both" ]]; then
+if [[ "$MODE" == "display" ]]; then
   systemctl disable --now display-manager.service 2>/dev/null || true
   systemctl stop "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
   systemctl disable --now "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
@@ -418,9 +417,9 @@ find "${INSTALL_ROOT}/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\
     done
 
 log "${RELEASE_TAG} ist installiert."
-if [[ "$MODE" == "headless" || "$MODE" == "both" ]]; then
+if [[ "$MODE" == "headless" ]]; then
   log "Netzwerk-URL: http://$(hostname -I | awk '{print $1}'):${PORT}"
 fi
-if [[ "$MODE" == "display" || "$MODE" == "both" ]]; then
+if [[ "$MODE" == "display" ]]; then
   log "Cage startet die Oberfläche lokal auf dem HDMI-Display. Die HDMI-Änderung wird nach einem Neustart vollständig übernommen."
 fi

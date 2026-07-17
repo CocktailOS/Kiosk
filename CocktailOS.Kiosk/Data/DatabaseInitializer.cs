@@ -15,7 +15,8 @@ public static class DatabaseInitializer
             {
                 PumpDriver = PumpDriverNames.Dummy,
                 PinNumberingScheme = PinNumberingSchemes.Logical,
-                Theme = ThemeNames.Dark
+                Theme = ThemeNames.Dark,
+                NetworkAccessEnabled = string.Equals(Environment.GetEnvironmentVariable("COCKTAILOS_NETWORK_ACCESS_DEFAULT"), "true", StringComparison.OrdinalIgnoreCase)
             });
         }
 
@@ -42,14 +43,14 @@ public static class DatabaseInitializer
         db.Ingredients.AddRange(rum, cola, lime, vodka, orange, cranberry, grenadine, pineapple);
 
         db.Pumps.AddRange(
-            new Pump { Name = "Pumpe 1", GpioPin = 17, FlowRateMlPerSecond = 20m, Ingredient = rum, ActiveHigh = false },
-            new Pump { Name = "Pumpe 2", GpioPin = 18, FlowRateMlPerSecond = 24m, Ingredient = cola, ActiveHigh = false },
-            new Pump { Name = "Pumpe 3", GpioPin = 22, FlowRateMlPerSecond = 18m, Ingredient = lime, ActiveHigh = false },
-            new Pump { Name = "Pumpe 4", GpioPin = 23, FlowRateMlPerSecond = 20m, Ingredient = vodka, ActiveHigh = false },
-            new Pump { Name = "Pumpe 5", GpioPin = 24, FlowRateMlPerSecond = 24m, Ingredient = orange, ActiveHigh = false },
-            new Pump { Name = "Pumpe 6", GpioPin = 25, FlowRateMlPerSecond = 24m, Ingredient = cranberry, ActiveHigh = false },
-            new Pump { Name = "Pumpe 7", GpioPin = 5, FlowRateMlPerSecond = 16m, Ingredient = grenadine, ActiveHigh = false },
-            new Pump { Name = "Pumpe 8", GpioPin = 6, FlowRateMlPerSecond = 24m, Ingredient = pineapple, ActiveHigh = false });
+            new Pump { Name = "Pumpe 1", GpioPin = 17, FlowRateMlPerSecond = 20m, Ingredient = rum },
+            new Pump { Name = "Pumpe 2", GpioPin = 18, FlowRateMlPerSecond = 24m, Ingredient = cola },
+            new Pump { Name = "Pumpe 3", GpioPin = 22, FlowRateMlPerSecond = 18m, Ingredient = lime },
+            new Pump { Name = "Pumpe 4", GpioPin = 23, FlowRateMlPerSecond = 20m, Ingredient = vodka },
+            new Pump { Name = "Pumpe 5", GpioPin = 24, FlowRateMlPerSecond = 24m, Ingredient = orange },
+            new Pump { Name = "Pumpe 6", GpioPin = 25, FlowRateMlPerSecond = 24m, Ingredient = cranberry },
+            new Pump { Name = "Pumpe 7", GpioPin = 5, FlowRateMlPerSecond = 16m, Ingredient = grenadine },
+            new Pump { Name = "Pumpe 8", GpioPin = 6, FlowRateMlPerSecond = 24m, Ingredient = pineapple });
 
         db.Cocktails.AddRange(
             CreateCocktail("Cuba Libre", "Rum, Cola und ein Spritzer Limette.", "/assets/cuba-libre.svg", normal,

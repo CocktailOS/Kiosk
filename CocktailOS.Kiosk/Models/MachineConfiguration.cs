@@ -7,4 +7,6 @@ public sealed class MachineConfiguration
     public required string PumpDriver { get; set; } = PumpDriverNames.Dummy;
     public required string PinNumberingScheme { get; set; } = PinNumberingSchemes.Logical;
     public required string Theme { get; set; } = ThemeNames.Dark;
+    public bool NetworkAccessEnabled { get; set; }
+    public string? NetworkAccessPinHash { get; set; }
 }

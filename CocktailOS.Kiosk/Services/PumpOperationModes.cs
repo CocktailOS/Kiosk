@@ -5,4 +5,5 @@ public static class PumpOperationModes
     public const string Dispense = "dispense";
     public const string Cleaning = "cleaning";
     public const string Priming = "priming";
+    public const string Calibration = "calibration";
 }

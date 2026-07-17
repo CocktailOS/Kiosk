@@ -12,6 +12,7 @@ public static class DispenseEndpointExtensions
         api.MapGet("/dispenses/current", GetStatus); api.MapPost("/dispenses", StartDispenseAsync); api.MapPost("/dispenses/current/stop", StopAsync);
         api.MapGet("/cleaning/current", GetStatus); api.MapPost("/cleaning", StartCleaningAsync); api.MapPost("/cleaning/current/stop", StopAsync);
         api.MapGet("/priming/current", GetStatus); api.MapPost("/priming", StartPrimingAsync); api.MapPost("/priming/current/stop", StopAsync);
+        api.MapGet("/calibrations/current", GetStatus); api.MapPost("/calibrations", StartCalibrationAsync); api.MapPost("/calibrations/current/stop", StopAsync);
         return api;
     }
 
@@ -36,6 +37,13 @@ public static class DispenseEndpointExtensions
     {
         try { return Results.Accepted("/api/priming/current", await service.StartPrimingAsync(request.PumpId, ct)); }
         catch (DispenseValidationException ex) { return Results.BadRequest(new ProblemDetails { Title = "Vorbereitung nicht möglich", Detail = ex.Message }); }
+        catch (DispenseConflictException ex) { return Results.Conflict(new ProblemDetails { Title = "Pumpen sind belegt", Detail = ex.Message }); }
+    }
+
+    private static async Task<IResult> StartCalibrationAsync(StartPumpCalibrationRequest request, DispenseService service, CancellationToken ct)
+    {
+        try { return Results.Accepted("/api/calibrations/current", await service.StartCalibrationAsync(request.PumpId, ct)); }
+        catch (DispenseValidationException ex) { return Results.BadRequest(new ProblemDetails { Title = "Kalibrierung nicht möglich", Detail = ex.Message }); }
         catch (DispenseConflictException ex) { return Results.Conflict(new ProblemDetails { Title = "Pumpen sind belegt", Detail = ex.Message }); }
     }
 }

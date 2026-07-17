@@ -59,7 +59,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Restore
-        run: dotnet restore "$PROJECT_PATH" -r "$RUNTIME_IDENTIFIER"
+        run: |
+          dotnet restore CocktailOS.Kiosk.slnx
+          dotnet restore "$PROJECT_PATH" -r "$RUNTIME_IDENTIFIER"
+
+      - name: Test
+        run: dotnet test CocktailOS.Kiosk.slnx --configuration Release --no-restore
 
       - name: Publish
         run: |

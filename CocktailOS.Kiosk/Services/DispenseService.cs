@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using CocktailOS.Kiosk.Contracts;
 using CocktailOS.Kiosk.Data;
 using CocktailOS.Kiosk.Models;
@@ -14,6 +16,7 @@ public sealed class DispenseService(
     public const int MinimumCleaningDurationSeconds = 5;
     public const int MaximumCleaningDurationSeconds = 300;
     public const int MaximumPrimingDurationSeconds = 60;
+    public const int CalibrationDurationSeconds = 10;
 
     private readonly object _sync = new();
     private CancellationTokenSource? _cancellation;
@@ -59,6 +62,20 @@ public sealed class DispenseService(
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             plan = await CreatePrimingPlanAsync(db, pumpId, cancellationToken);
+        }
+
+        return StartPlan(plan);
+    }
+
+    public async Task<DispenseStatusResponse> StartCalibrationAsync(
+        int pumpId,
+        CancellationToken cancellationToken)
+    {
+        DispensePlan plan;
+        await using (var scope = scopeFactory.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            plan = await CreateCalibrationPlanAsync(db, pumpId, cancellationToken);
         }
 
         return StartPlan(plan);
@@ -128,38 +145,25 @@ public sealed class DispenseService(
 
     private async Task ExecuteAsync(DispensePlan plan, CancellationToken cancellationToken)
     {
+        var finalStatus = DispenseStatuses.Completed;
+        string? finalError = null;
         try
         {
             using var safetyCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var tasks = plan.Steps
-                .Select(step => RunPumpWithSafetyAsync(plan.Hardware, step, safetyCancellation))
+                .Select(step => RunPumpWithSafetyAsync(plan, step, safetyCancellation))
                 .ToArray();
             await Task.WhenAll(tasks);
-
-            lock (_sync)
-            {
-                _state = _state with { Status = DispenseStatuses.Completed, CompletedAt = DateTimeOffset.UtcNow };
-            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            lock (_sync)
-            {
-                _state = _state with { Status = DispenseStatuses.Stopped, CompletedAt = DateTimeOffset.UtcNow };
-            }
+            finalStatus = DispenseStatuses.Stopped;
         }
         catch (Exception exception)
         {
             logger.LogError(exception, "Der Ausschank {DispenseId} ist fehlgeschlagen", plan.Id);
-            lock (_sync)
-            {
-                _state = _state with
-                {
-                    Status = DispenseStatuses.Failed,
-                    Error = "Die Pumpensteuerung ist fehlgeschlagen. Bitte Hardware und Konfiguration prüfen.",
-                    CompletedAt = DateTimeOffset.UtcNow
-                };
-            }
+            finalStatus = DispenseStatuses.Failed;
+            finalError = "Die Pumpensteuerung ist fehlgeschlagen. Bitte Hardware und Konfiguration prüfen.";
         }
         finally
         {
@@ -170,27 +174,44 @@ public sealed class DispenseService(
             catch (Exception exception)
             {
                 logger.LogCritical(exception, "Nicht alle Pumpen konnten sicher abgeschaltet werden");
-                lock (_sync)
+                finalStatus = DispenseStatuses.Failed;
+                finalError = "NOT-AUS fehlgeschlagen. Stromversorgung der Pumpen sofort trennen.";
+            }
+
+            if (plan.Mode == PumpOperationModes.Dispense)
+            {
+                try
                 {
-                    _state = _state with
-                    {
-                        Status = DispenseStatuses.Failed,
-                        Error = "NOT-AUS fehlgeschlagen. Stromversorgung der Pumpen sofort trennen.",
-                        CompletedAt = DateTimeOffset.UtcNow
-                    };
+                    await ApplyInventoryConsumptionAsync(plan);
                 }
+                catch (Exception exception)
+                {
+                    logger.LogError(exception, "Der Vorrat für Ausschank {DispenseId} konnte nicht aktualisiert werden", plan.Id);
+                    finalStatus = DispenseStatuses.Failed;
+                    finalError = "Der Cocktail wurde ausgegeben, aber der Vorrat konnte nicht aktualisiert werden.";
+                }
+            }
+
+            lock (_sync)
+            {
+                _state = _state with
+                {
+                    Status = finalStatus,
+                    Error = finalError,
+                    CompletedAt = DateTimeOffset.UtcNow
+                };
             }
         }
     }
 
     private async Task RunPumpWithSafetyAsync(
-        HardwareSettings hardware,
+        DispensePlan plan,
         DispenseStep step,
         CancellationTokenSource safetyCancellation)
     {
         try
         {
-            await RunPumpAsync(hardware, step, safetyCancellation.Token);
+            await RunPumpAsync(plan, step, safetyCancellation.Token);
         }
         catch
         {
@@ -200,17 +221,54 @@ public sealed class DispenseService(
         }
     }
 
-    private async Task RunPumpAsync(HardwareSettings hardware, DispenseStep step, CancellationToken cancellationToken)
+    private async Task RunPumpAsync(DispensePlan plan, DispenseStep step, CancellationToken cancellationToken)
     {
-        await pumpOutput.SetStateAsync(hardware, step.Channel, true, cancellationToken);
+        await pumpOutput.SetStateAsync(plan.Hardware, step.Channel, true, cancellationToken);
+        var startedAt = Stopwatch.GetTimestamp();
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(step.DurationSeconds), cancellationToken);
         }
         finally
         {
-            await pumpOutput.SetStateAsync(hardware, step.Channel, false, CancellationToken.None);
+            var actualSeconds = Math.Min(Stopwatch.GetElapsedTime(startedAt).TotalSeconds, step.DurationSeconds);
+            plan.ActualRunSeconds[step.Channel.PumpId] = actualSeconds;
+            await pumpOutput.SetStateAsync(plan.Hardware, step.Channel, false, CancellationToken.None);
         }
+    }
+
+    private async Task ApplyInventoryConsumptionAsync(DispensePlan plan)
+    {
+        var consumption = plan.Steps
+            .Where(x => x.IngredientId is not null && x.FlowRateMlPerSecond > 0)
+            .Select(x => new
+            {
+                IngredientId = x.IngredientId!.Value,
+                AmountMl = decimal.Round(
+                    Math.Min(x.AmountMl, (decimal)plan.ActualRunSeconds.GetValueOrDefault(x.Channel.PumpId) * x.FlowRateMlPerSecond),
+                    2)
+            })
+            .Where(x => x.AmountMl > 0)
+            .ToArray();
+
+        if (consumption.Length == 0) return;
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var ingredientIds = consumption.Select(x => x.IngredientId).ToArray();
+        var ingredients = await db.Ingredients
+            .Where(x => ingredientIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id);
+
+        foreach (var used in consumption)
+        {
+            if (ingredients.TryGetValue(used.IngredientId, out var ingredient))
+            {
+                ingredient.RemainingVolumeMl = Math.Max(0m, ingredient.RemainingVolumeMl - used.AmountMl);
+            }
+        }
+
+        await db.SaveChangesAsync();
     }
 
     private static async Task<DispensePlan> CreatePlanAsync(
@@ -265,11 +323,29 @@ public sealed class DispenseService(
             var pump = pumps[item.IngredientId];
             var amountMl = decimal.Round(item.AmountMl * scale, 2);
             return new DispenseStep(
+                item.IngredientId,
                 item.Ingredient.Name,
                 amountMl,
                 new PumpChannel(pump.Id, pump.Name, pump.GpioPin, pump.ActiveHigh),
-                (double)(amountMl / pump.FlowRateMlPerSecond));
+                (double)(amountMl / pump.FlowRateMlPerSecond),
+                pump.FlowRateMlPerSecond);
         }).ToArray();
+
+        var insufficient = cocktail.Ingredients
+            .Select(item => new
+            {
+                item.Ingredient.Name,
+                NeededMl = decimal.Round(item.AmountMl * scale, 2),
+                item.Ingredient.RemainingVolumeMl
+            })
+            .Where(x => x.RemainingVolumeMl < x.NeededMl)
+            .Select(x => $"{x.Name} ({x.RemainingVolumeMl:0.##} von {x.NeededMl:0.##} ml)")
+            .ToArray();
+
+        if (insufficient.Length > 0)
+        {
+            throw new DispenseValidationException($"Nicht genügend Vorrat: {string.Join(", ", insufficient)}.");
+        }
 
         return new DispensePlan(
             Guid.NewGuid(),
@@ -317,10 +393,12 @@ public sealed class DispenseService(
             .SingleAsync(x => x.Id == MachineConfiguration.SingletonId, cancellationToken);
 
         var steps = pumps.Select(pump => new DispenseStep(
+            null,
             pump.Name,
             0,
             new PumpChannel(pump.Id, pump.Name, pump.GpioPin, pump.ActiveHigh),
-            durationSeconds)).ToArray();
+            durationSeconds,
+            0)).ToArray();
 
         return new DispensePlan(
             Guid.NewGuid(),
@@ -349,15 +427,62 @@ public sealed class DispenseService(
             .SingleAsync(x => x.Id == MachineConfiguration.SingletonId, cancellationToken);
 
         var step = new DispenseStep(
+            null,
             pump.Name,
             0,
             new PumpChannel(pump.Id, pump.Name, pump.GpioPin, pump.ActiveHigh),
-            MaximumPrimingDurationSeconds);
+            MaximumPrimingDurationSeconds,
+            0);
 
         return new DispensePlan(
             Guid.NewGuid(),
             PumpOperationModes.Priming,
             "Pumpe vorbereiten",
+            pump.Name,
+            new HardwareSettings(configuration.PumpDriver, configuration.PinNumberingScheme),
+            [step]);
+    }
+
+    private static async Task<DispensePlan> CreateCalibrationPlanAsync(
+        AppDbContext db,
+        int pumpId,
+        CancellationToken cancellationToken)
+    {
+        var pump = await db.Pumps
+            .AsNoTracking()
+            .Include(x => x.Ingredient)
+            .SingleOrDefaultAsync(x => x.Id == pumpId && x.IsEnabled, cancellationToken);
+
+        if (pump is null)
+        {
+            throw new DispenseValidationException("Die ausgewählte Pumpe existiert nicht oder ist deaktiviert.");
+        }
+
+        if (pump.Ingredient is null)
+        {
+            throw new DispenseValidationException("Ordne der Pumpe vor der Kalibrierung eine Zutat zu.");
+        }
+
+        var configuration = await db.MachineConfigurations.AsNoTracking()
+            .SingleAsync(x => x.Id == MachineConfiguration.SingletonId, cancellationToken);
+
+        if (!configuration.PumpDriver.Equals(PumpDriverNames.Gpio, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DispenseValidationException("Die Kalibrierung ist nur mit dem GPIO-Pumpentreiber möglich.");
+        }
+
+        var step = new DispenseStep(
+            null,
+            pump.Ingredient.Name,
+            0,
+            new PumpChannel(pump.Id, pump.Name, pump.GpioPin, pump.ActiveHigh),
+            CalibrationDurationSeconds,
+            0);
+
+        return new DispensePlan(
+            Guid.NewGuid(),
+            PumpOperationModes.Calibration,
+            "Pumpe kalibrieren",
             pump.Name,
             new HardwareSettings(configuration.PumpDriver, configuration.PinNumberingScheme),
             [step]);
@@ -396,13 +521,18 @@ public sealed class DispenseService(
         string CocktailName,
         string SizeName,
         HardwareSettings Hardware,
-        IReadOnlyList<DispenseStep> Steps);
+        IReadOnlyList<DispenseStep> Steps)
+    {
+        public ConcurrentDictionary<int, double> ActualRunSeconds { get; } = new();
+    }
 
     private sealed record DispenseStep(
+        int? IngredientId,
         string IngredientName,
         decimal AmountMl,
         PumpChannel Channel,
-        double DurationSeconds);
+        double DurationSeconds,
+        decimal FlowRateMlPerSecond);
 
     private sealed record DispenseState(
         Guid? Id,

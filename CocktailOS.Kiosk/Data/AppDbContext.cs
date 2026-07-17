@@ -43,6 +43,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
             entity.Property(x => x.AlcoholPercentage).HasPrecision(5, 2);
+            entity.Property(x => x.BottleSizeMl).HasPrecision(8, 2).HasDefaultValue(InventoryDefaults.DefaultBottleSizeMl);
+            entity.Property(x => x.RemainingVolumeMl).HasPrecision(8, 2).HasDefaultValue(InventoryDefaults.DefaultBottleSizeMl);
             entity.HasIndex(x => x.Name).IsUnique();
         });
 
@@ -50,11 +52,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
             entity.Property(x => x.FlowRateMlPerSecond).HasPrecision(8, 3);
+            entity.Property(x => x.FlowRateSource).HasMaxLength(20).HasDefaultValue(FlowRateSources.Manual).IsRequired();
             entity.HasIndex(x => x.GpioPin).IsUnique();
             entity.HasIndex(x => x.IngredientId).IsUnique();
             entity.HasOne(x => x.Ingredient)
                 .WithOne(x => x.Pump)
                 .HasForeignKey<Pump>(x => x.IngredientId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.CalibratedIngredient)
+                .WithMany()
+                .HasForeignKey(x => x.CalibratedIngredientId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -70,6 +77,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.PumpDriver).HasMaxLength(20).IsRequired();
             entity.Property(x => x.PinNumberingScheme).HasMaxLength(20).IsRequired();
             entity.Property(x => x.Theme).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.NetworkAccessEnabled).HasDefaultValue(false);
+            entity.Property(x => x.NetworkAccessPinHash).HasMaxLength(200);
         });
     }
 }

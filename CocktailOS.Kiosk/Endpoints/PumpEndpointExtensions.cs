@@ -14,6 +14,7 @@ public static class PumpEndpointExtensions
     {
         api.MapGet("/pumps", GetAsync); api.MapPost("/pumps", CreateAsync);
         api.MapPut("/pumps/{id:int}", UpdateAsync); api.MapDelete("/pumps/{id:int}", DeleteAsync);
+        api.MapPut("/pumps/{id:int}/calibration", SaveCalibrationAsync);
         return api;
     }
 
@@ -35,7 +36,45 @@ public static class PumpEndpointExtensions
         var pump = await db.Pumps.Include(x => x.Ingredient).SingleOrDefaultAsync(x => x.Id == id, ct);
         if (pump is null) return Results.NotFound();
         var validation = await ValidateAsync(request, id, db, ct); if (validation is not null) return validation;
-        Apply(pump, request); await db.SaveChangesAsync(ct); await db.Entry(pump).Reference(x => x.Ingredient).LoadAsync(ct);
+        var flowRateChanged = pump.FlowRateMlPerSecond != request.FlowRateMlPerSecond;
+        Apply(pump, request);
+        if (flowRateChanged)
+        {
+            pump.FlowRateSource = FlowRateSources.Manual;
+            pump.CalibratedIngredientId = null;
+            pump.LastCalibratedAt = null;
+        }
+        await db.SaveChangesAsync(ct); await db.Entry(pump).Reference(x => x.Ingredient).LoadAsync(ct);
+        return Results.Ok(pump.ToResponse());
+    }
+
+    private static async Task<IResult> SaveCalibrationAsync(int id, PumpCalibrationRequest request, AppDbContext db, CancellationToken ct)
+    {
+        var pump = await db.Pumps.Include(x => x.Ingredient).SingleOrDefaultAsync(x => x.Id == id, ct);
+        if (pump is null) return Results.NotFound();
+        if (!pump.IsEnabled) return EndpointResults.Validation("pump", "Die Pumpe ist deaktiviert.");
+        if (pump.IngredientId is null) return EndpointResults.Validation("ingredientId", "Ordne der Pumpe vor der Kalibrierung eine Zutat zu.");
+
+        var configuration = await db.MachineConfigurations.AsNoTracking()
+            .SingleAsync(x => x.Id == MachineConfiguration.SingletonId, ct);
+        if (!configuration.PumpDriver.Equals(PumpDriverNames.Gpio, StringComparison.OrdinalIgnoreCase))
+            return EndpointResults.Validation("pumpDriver", "Die Kalibrierung ist nur mit dem GPIO-Pumpentreiber möglich.");
+
+        var volumes = request.MeasuredVolumesMl;
+        if (volumes is null || volumes.Count is < 1 or > PumpCalibrationCalculator.MaximumMeasurements)
+            return EndpointResults.Validation("measuredVolumesMl", "Gib ein bis drei Messwerte an.");
+        if (volumes.Any(volume => volume is < PumpCalibrationCalculator.MinimumMeasuredVolumeMl or > PumpCalibrationCalculator.MaximumMeasuredVolumeMl))
+            return EndpointResults.Validation("measuredVolumesMl", "Jeder Messwert muss zwischen 1 und 10.000 ml liegen.");
+
+        var flowRate = PumpCalibrationCalculator.Calculate(volumes).FlowRateMlPerSecond;
+        if (flowRate is <= 0 or > 1000)
+            return EndpointResults.Validation("flowRateMlPerSecond", "Die berechnete Förderrate muss größer als 0 und höchstens 1000 ml/s sein.");
+
+        pump.FlowRateMlPerSecond = flowRate;
+        pump.FlowRateSource = FlowRateSources.Calibrated;
+        pump.CalibratedIngredientId = pump.IngredientId;
+        pump.LastCalibratedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
         return Results.Ok(pump.ToResponse());
     }
 

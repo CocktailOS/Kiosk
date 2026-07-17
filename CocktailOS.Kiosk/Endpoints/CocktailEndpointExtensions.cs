@@ -64,7 +64,10 @@ public static class CocktailEndpointExtensions
     }
 
     private static IQueryable<Cocktail> Query(AppDbContext db) => db.Cocktails.AsNoTracking().AsSplitQuery()
-        .Include(x => x.StandardSize).Include(x => x.Ingredients).ThenInclude(x => x.Ingredient);
+        .Include(x => x.StandardSize)
+        .Include(x => x.Ingredients)
+        .ThenInclude(x => x.Ingredient)
+        .ThenInclude(x => x.Pump);
 
     private static void Apply(Cocktail cocktail, CocktailWriteRequest request)
     {
