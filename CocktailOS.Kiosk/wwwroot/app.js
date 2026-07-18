@@ -1161,8 +1161,8 @@
         const config = state.system;
         const update = state.update;
         const updateContent = update?.isAvailable
-            ? `<span class="system-update-available">v${escapeHtml(update.latestVersion)} ist verfügbar</span><button type="button" class="primary-button system-update-button" data-app-update>${icons.download}<span>Installieren</span></button>`
-            : `<span class="system-update-current">${update ? 'Auf dem neuesten Stand' : 'Update-Status nicht verfügbar'}</span>`;
+            ? `<span class="system-update-available">v${escapeHtml(update.latestVersion)} ist verfügbar</span><button type="button" class="primary-button system-update-button" data-app-update>${icons.download}<span>Installieren</span></button><button type="button" class="secondary-button system-update-button" data-app-update-check>Nach Updates suchen</button>`
+            : `<span class="system-update-current">${update ? 'Auf dem neuesten Stand' : 'Update-Status nicht verfügbar'}</span><button type="button" class="secondary-button system-update-button" data-app-update-check>Nach Updates suchen</button>`;
         main.innerHTML = `<section class="settings-card system-hero"><header class="system-page-heading"><span class="system-heading-icon" aria-hidden="true">${icons.settings}</span><div><h1>System</h1><p>Hardware, Netzwerkzugriff und Software dieser Mixstation konfigurieren.</p></div></header><form id="system-form"><div class="system-config-grid"><section class="system-section system-hardware-section" aria-labelledby="system-hardware-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.raspberryPi}</span><div><h2 id="system-hardware-title">Hardware</h2><p>Lege fest, wie CocktailOS die angeschlossenen Pumpen ansteuert.</p></div></header><div class="system-choice-grid"><fieldset class="system-choice-group"><legend>Pumpentreiber</legend><label class="option-card system-option-card"><input type="radio" name="pumpDriver" value="Dummy" ${config.pumpDriver === 'Dummy' ? 'checked' : ''}><strong>Dummy</strong><span>Sicher testen, ohne GPIO-Ausgänge zu schalten.</span></label><label class="option-card system-option-card"><input type="radio" name="pumpDriver" value="Gpio" ${config.pumpDriver === 'Gpio' ? 'checked' : ''}><strong>Raspberry Pi GPIO</strong><span>Steuert reale Relais über System.Device.Gpio.</span></label></fieldset><fieldset class="system-choice-group"><legend>Pin-Nummerierung</legend><label class="option-card system-option-card"><input type="radio" name="pinNumberingScheme" value="Logical" ${config.pinNumberingScheme === 'Logical' ? 'checked' : ''}><strong>Logical / BCM</strong><span>GPIO-Nummern, beispielsweise GPIO17.</span></label><label class="option-card system-option-card"><input type="radio" name="pinNumberingScheme" value="Board" ${config.pinNumberingScheme === 'Board' ? 'checked' : ''}><strong>Board / physisch</strong><span>Positionen 1 bis 40 auf dem Raspberry-Pi-Header.</span></label></fieldset></div><p class="system-inline-note">Die Relaispolarität wird direkt für jede Pumpe festgelegt.</p></section><section class="system-section system-network-section" aria-labelledby="system-network-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.lock}</span><div><h2 id="system-network-title">Netzwerkzugriff</h2><p>Steuere CocktailOS von einem anderen Gerät im lokalen Netzwerk.</p></div></header><label class="option-card network-access-option system-network-toggle"><input type="checkbox" name="networkAccessEnabled" ${config.networkAccessEnabled ? 'checked' : ''}><span class="network-switch" aria-hidden="true"><span></span></span><strong>Fernzugriff aktivieren</strong><span>Der Zugang ist durch einen vierstelligen PIN geschützt.</span></label><div class="network-access-note"><span>Nur in vertrauenswürdigen Netzwerken aktivieren.</span><button type="button" class="text-button network-pin-change" ${config.networkAccessEnabled ? '' : 'hidden'}>PIN ändern</button></div></section><section class="system-section system-update-section" aria-labelledby="application-update-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.download}</span><div><h2 id="application-update-title">Software</h2><p>Installierte Version und verfügbare Aktualisierungen.</p></div></header><div class="application-update-card"><div><span class="system-meta-label">Installierte Version</span><strong>v${escapeHtml(state.version || '–')}</strong></div><div class="application-update-status">${updateContent}</div></div></section></div><aside class="system-safety-note"><span aria-hidden="true">!</span><p>Bei active LOW bleibt der Ausgang im Ruhezustand HIGH und schaltet zum Pumpen auf LOW.</p></aside><footer class="system-form-footer"><p>Änderungen werden erst nach dem Speichern übernommen.</p><button class="primary-button" type="submit">Hardwarekonfiguration speichern</button></footer></form></section>`;
         const networkToggle = main.querySelector('[name="networkAccessEnabled"]');
         const form = main.querySelector('#system-form');
@@ -1180,7 +1180,28 @@
             });
         });
         pinChangeButton.addEventListener('click', () => openNetworkPinSetupDialog({ onSave: setNetworkPin }));
-        main.querySelector('[data-app-update]')?.addEventListener('click', openApplicationUpdateDialog);
+        const bindUpdateControls = () => {
+            main.querySelector('[data-app-update]')?.addEventListener('click', openApplicationUpdateDialog);
+            main.querySelector('[data-app-update-check]')?.addEventListener('click', async event => {
+                const button = event.currentTarget;
+                button.disabled = true;
+                button.textContent = 'Suche …';
+                try {
+                    state.update = await api('/api/app-update');
+                    const refreshedContent = state.update?.isAvailable
+                        ? `<span class="system-update-available">v${escapeHtml(state.update.latestVersion)} ist verfügbar</span><button type="button" class="primary-button system-update-button" data-app-update>${icons.download}<span>Installieren</span></button><button type="button" class="secondary-button system-update-button" data-app-update-check>Nach Updates suchen</button>`
+                        : `<span class="system-update-current">Auf dem neuesten Stand</span><button type="button" class="secondary-button system-update-button" data-app-update-check>Nach Updates suchen</button>`;
+                    main.querySelector('.application-update-status').innerHTML = refreshedContent;
+                    bindUpdateControls();
+                    showToast(state.update?.isAvailable ? `Version ${state.update.latestVersion} ist verfügbar.` : 'Keine neuen Updates gefunden.');
+                } catch (error) {
+                    button.disabled = false;
+                    button.textContent = 'Nach Updates suchen';
+                    showToast(error.message || 'Update-Status konnte nicht geprüft werden.', true);
+                }
+            });
+        };
+        bindUpdateControls();
         form.addEventListener('submit', async event => {
             event.preventDefault();
             const submit = form.querySelector('[type="submit"]');
