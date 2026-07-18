@@ -12,6 +12,8 @@ KEEP_RELEASES="3"
 TAG=""
 INCLUDE_PRERELEASE="true"
 MODE=""
+NETWORK_PIN=""
+EXISTING_NETWORK_ACCESS_PIN_HASH=""
 ORIGINAL_ARGS=("$@")
 
 usage() {
@@ -23,7 +25,8 @@ Aufruf:
   curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- [Optionen]
 
 Optionen:
-  --headless          Ohne angeschlossenes Display installieren.
+  --headless          Ohne angeschlossenes Display installieren und den Netzwerkzugriff aktivieren.
+  --network-pin PIN   Vierstelligen PIN für den Netzwerkzugriff setzen (erforderlich mit --headless).
   --tag TAG           Eine bestimmte Release-Version installieren.
   --stable            Vorabversionen beim automatischen Update ignorieren.
   -h, --help          Diese Hilfe anzeigen.
@@ -41,6 +44,10 @@ while [[ $# -gt 0 ]]; do
       [[ -z "$MODE" ]] || fail "Nur ein Betriebsmodus ist erlaubt."
       MODE="${1#--}"
       shift
+      ;;
+    --network-pin)
+      NETWORK_PIN="${2:?Für --network-pin fehlt der PIN.}"
+      shift 2
       ;;
     --tag)
       TAG="${2:?Für --tag fehlt die Version.}"
@@ -193,10 +200,23 @@ download_file() {
 install_base_packages
 
 ENV_FILE="/etc/default/${SERVICE_NAME}"
-if [[ -z "$MODE" && -f "$ENV_FILE" ]]; then
-  MODE="$(sed -n -E 's/^COCKTAILOS_MODE=headless$/headless/p' "$ENV_FILE" | tail -n 1)"
+if [[ -f "$ENV_FILE" ]]; then
+  if [[ -z "$MODE" ]]; then
+    MODE="$(sed -n -E 's/^COCKTAILOS_MODE=headless$/headless/p' "$ENV_FILE" | tail -n 1)"
+  fi
+  EXISTING_NETWORK_ACCESS_PIN_HASH="$(sed -n -E 's/^COCKTAILOS_NETWORK_ACCESS_PIN_HASH=(.+)$/\1/p' "$ENV_FILE" | tail -n 1)"
 fi
 MODE="${MODE:-display}"
+
+if [[ "$MODE" == "headless" ]]; then
+  if [[ -n "$NETWORK_PIN" ]]; then
+    [[ "$NETWORK_PIN" =~ ^[0-9]{4}$ ]] || fail "Der Netzwerk-PIN muss aus genau vier Ziffern bestehen."
+  elif [[ -z "$EXISTING_NETWORK_ACCESS_PIN_HASH" ]]; then
+    fail "Für --headless ist ein vierstelliger PIN über --network-pin erforderlich."
+  fi
+elif [[ -n "$NETWORK_PIN" ]]; then
+  fail "--network-pin kann nur zusammen mit --headless verwendet werden."
+fi
 
 if [[ "$MODE" == "display" ]]; then
   install_display_packages
@@ -253,14 +273,29 @@ ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 
 APP_URL="http://0.0.0.0:${PORT}"
 NETWORK_ACCESS_DEFAULT="false"
+NETWORK_ACCESS_PIN_HASH="$EXISTING_NETWORK_ACCESS_PIN_HASH"
 if [[ "$MODE" == "headless" ]]; then
   NETWORK_ACCESS_DEFAULT="true"
+  if [[ -n "$NETWORK_PIN" ]]; then
+    NETWORK_ACCESS_PIN_HASH="$(NETWORK_PIN="$NETWORK_PIN" python3 - <<'PY'
+import base64
+import hashlib
+import os
+
+pin = os.environ["NETWORK_PIN"].encode("ascii")
+salt = os.urandom(16)
+digest = hashlib.pbkdf2_hmac("sha256", pin, salt, 120_000, 32)
+print(f"v1.120000.{base64.b64encode(salt).decode()}.{base64.b64encode(digest).decode()}")
+PY
+)"
+  fi
 fi
 
 cat > "$ENV_FILE" <<ENVIRONMENT
 # Managed by CocktailOS Kiosk install.sh.
 COCKTAILOS_MODE=${MODE}
 COCKTAILOS_NETWORK_ACCESS_DEFAULT=${NETWORK_ACCESS_DEFAULT}
+COCKTAILOS_NETWORK_ACCESS_PIN_HASH=${NETWORK_ACCESS_PIN_HASH}
 ENVIRONMENT
 chmod 0644 "$ENV_FILE"
 

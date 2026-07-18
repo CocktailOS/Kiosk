@@ -1,4 +1,5 @@
 using CocktailOS.Kiosk.Models;
+using CocktailOS.Kiosk.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace CocktailOS.Kiosk.Data;
@@ -11,12 +12,15 @@ public static class DatabaseInitializer
 
         if (!await db.MachineConfigurations.AnyAsync(cancellationToken))
         {
+            var networkAccessEnabled = string.Equals(Environment.GetEnvironmentVariable("COCKTAILOS_NETWORK_ACCESS_DEFAULT"), "true", StringComparison.OrdinalIgnoreCase);
+            var networkAccessPinHash = Environment.GetEnvironmentVariable("COCKTAILOS_NETWORK_ACCESS_PIN_HASH");
             db.MachineConfigurations.Add(new MachineConfiguration
             {
                 PumpDriver = PumpDriverNames.Dummy,
                 PinNumberingScheme = PinNumberingSchemes.Logical,
                 Theme = ThemeNames.Dark,
-                NetworkAccessEnabled = string.Equals(Environment.GetEnvironmentVariable("COCKTAILOS_NETWORK_ACCESS_DEFAULT"), "true", StringComparison.OrdinalIgnoreCase)
+                NetworkAccessEnabled = networkAccessEnabled,
+                NetworkAccessPinHash = networkAccessEnabled && NetworkAccessPinService.IsHash(networkAccessPinHash) ? networkAccessPinHash : null
             });
         }
 

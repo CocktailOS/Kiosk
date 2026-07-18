@@ -10,6 +10,21 @@ public sealed class NetworkAccessPinService
 
     public bool IsValid(string? pin) => pin is { Length: 4 } && pin.All(char.IsAsciiDigit);
 
+    public static bool IsHash(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var parts = value.Split('.', StringSplitOptions.None);
+        if (parts.Length != 4 || parts[0] != "v1" || !int.TryParse(parts[1], out var iterations) || iterations <= 0) return false;
+        try
+        {
+            return Convert.FromBase64String(parts[2]).Length == SaltLength && Convert.FromBase64String(parts[3]).Length == HashLength;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
     public string Hash(string pin)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pin);
@@ -21,8 +36,9 @@ public sealed class NetworkAccessPinService
     public bool Verify(string? pin, string? storedHash)
     {
         if (!IsValid(pin) || string.IsNullOrWhiteSpace(storedHash)) return false;
+        if (!IsHash(storedHash)) return false;
         var parts = storedHash.Split('.', StringSplitOptions.None);
-        if (parts.Length != 4 || parts[0] != "v1" || !int.TryParse(parts[1], out var iterations)) return false;
+        var iterations = int.Parse(parts[1]);
         try
         {
             var salt = Convert.FromBase64String(parts[2]);

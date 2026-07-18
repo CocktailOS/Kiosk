@@ -59,11 +59,13 @@ Das Installationsskript lädt die aktuelle ARM64-Release, prüft deren Prüfsumm
 
 ### Ohne angeschlossenes Display
 
-Startet ausschließlich die API. Der Netzwerkzugriff ist dabei direkt aktiviert.
+Startet ausschließlich die API. Der Netzwerkzugriff ist dabei direkt aktiviert und durch einen selbst gewählten vierstelligen PIN geschützt. Der PIN wird beim ersten Start als Hash in der Datenbank hinterlegt; bei Updates bleiben die bestehende Konfiguration und der PIN unverändert.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --headless
+curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --headless --network-pin 1234
 ```
+
+Anschließend ist CocktailOS über `http://<IP-des-Pi>:5149` erreichbar. Verwende statt `1234` einen eigenen PIN.
 
 ### Displaybetrieb
 
