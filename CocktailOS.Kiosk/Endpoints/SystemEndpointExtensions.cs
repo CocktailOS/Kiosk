@@ -21,15 +21,13 @@ public static class SystemEndpointExtensions
 
     private static IResult GetApplicationInfo() => Results.Ok(new ApplicationInfoResponse(GetApplicationVersion()));
 
-    private static async Task<IResult> GetApplicationUpdateAsync(HttpContext context, ApplicationUpdateService updateService, CancellationToken ct)
+    private static async Task<IResult> GetApplicationUpdateAsync(ApplicationUpdateService updateService, CancellationToken ct)
     {
-        if (!IsLocalRequest(context)) return Results.Forbid();
         return Results.Ok(await updateService.GetStatusAsync(GetApplicationVersion(), ct));
     }
 
-    private static async Task<IResult> StartApplicationUpdateAsync(HttpContext context, ApplicationUpdateService updateService, CancellationToken ct)
+    private static async Task<IResult> StartApplicationUpdateAsync(ApplicationUpdateService updateService, CancellationToken ct)
     {
-        if (!IsLocalRequest(context)) return Results.Forbid();
         var update = await updateService.GetStatusAsync(GetApplicationVersion(), ct);
         if (!update.IsAvailable || string.IsNullOrWhiteSpace(update.LatestVersion))
             return Results.Conflict(new ProblemDetails { Title = "Kein Update verfügbar", Detail = "Die Anwendung ist bereits aktuell oder die Update-Prüfung ist nicht verfügbar." });
@@ -91,7 +89,8 @@ public static class SystemEndpointExtensions
             configuration.NetworkAccessEnabled,
             pinConfigured,
             isRemoteRequest && configuration.NetworkAccessEnabled && pinConfigured && !isAuthenticated,
-            isAuthenticated));
+            isAuthenticated,
+            configuration.Theme));
     }
 
     private static async Task<IResult> AuthenticateNetworkAccessAsync(HttpContext context, NetworkPinRequest request, AppDbContext db, NetworkAccessPinService pinService, NetworkAccessSessionService sessions, CancellationToken ct)

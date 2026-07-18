@@ -627,6 +627,14 @@ html[data-theme="light"] .calibration-result-rate > strong { color: #5f3cad; }
 .option-card strong { display: block; margin-bottom: 5px; }
 .option-card span { color: var(--text-muted); font-size: 13px; }
 .system-note { margin-top: 18px; padding: 14px; border-left: 3px solid var(--accent); border-radius: 0 12px 12px 0; background: rgba(248,196,92,.08); color: #d9d0b5; font-size: 13px; }
+.application-update-setting { margin-top: 18px; }
+.application-update-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); }
+.application-update-card strong, .application-update-card span { display: block; }
+.application-update-card > div > span { margin-top: 4px; color: var(--text-muted); font-size: 13px; }
+.application-update-status { display: flex; align-items: center; justify-content: flex-end; gap: 12px; text-align: right; }
+.application-update-status > span { max-width: 260px; }
+.system-update-button { flex: none; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.system-update-button svg { width: 18px; height: 18px; }
 
 .toast-region { position: fixed; z-index: 1200; right: 18px; bottom: 18px; display: grid; gap: 10px; pointer-events: none; }
 .toast { max-width: 380px; padding: 14px 17px; border: 1px solid var(--line); border-radius: 14px; background: #172235; color: var(--text); box-shadow: var(--shadow); }
@@ -1486,4 +1494,158 @@ button, .primary-button, .secondary-button, .danger-button, .tab-button { white-
     .network-pin-setup-dialog .settings-dialog-body { overflow-y: auto; }
     .network-pin-setup-dialog .pin-keypad { max-width: 280px; }
     .network-pin-setup-dialog .pin-keypad button { min-height: 46px; }
+}
+
+@media (max-width: 620px) {
+    .application-update-card,
+    .application-update-status {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .application-update-status { text-align: left; }
+    .application-update-status > span { max-width: none; }
+    .system-update-button { justify-content: center; }
+}
+
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app */
+.system-hero { padding: 24px; background: var(--surface); }
+.system-page-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+.system-heading-icon, .system-section-icon { display: grid; flex: 0 0 auto; place-items: center; color: var(--primary); }
+.system-heading-icon { width: 46px; height: 46px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft); }
+.system-heading-icon svg { width: 23px; height: 23px; }
+.system-page-heading h1 { margin: 0; font-size: 25px; }
+.system-page-heading p, .system-section-heading p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
+.system-config-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .9fr); gap: 14px; align-items: stretch; }
+.system-section { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft); }
+.system-hardware-section { grid-row: span 2; }
+.system-section-heading { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
+.system-section-icon { width: 32px; height: 32px; margin-top: 1px; border-radius: 10px; background: var(--surface-strong); }
+.system-section-icon svg { width: 17px; height: 17px; }
+.system-section-heading h2 { margin: 0; font-size: 16px; letter-spacing: -.01em; }
+.system-section-heading p { max-width: 42ch; font-size: 12px; }
+.system-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.system-choice-group { min-width: 0; margin: 0; padding: 0; border: 0; }
+.system-choice-group legend { margin-bottom: 8px; padding: 0; color: var(--text-muted); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.system-option-card { min-height: 78px; padding: 13px 14px; border-radius: 11px; background: var(--surface); }
+.system-option-card + .system-option-card { margin-top: 8px; }
+.system-option-card strong { margin-bottom: 3px; font-size: 13px; }
+.system-option-card span { font-size: 11px; line-height: 1.4; }
+.system-inline-note { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line); color: var(--text-muted); font-size: 11px; }
+.system-network-section, .system-update-section { display: flex; flex-direction: column; }
+.system-network-toggle { min-height: 82px; padding: 14px 58px 14px 14px; border-radius: 11px; background: var(--surface); }
+.system-network-toggle strong { margin-bottom: 3px; font-size: 13px; }
+.system-network-toggle span { font-size: 11px; line-height: 1.4; }
+.network-access-note { margin-top: 10px; color: var(--text-muted); font-size: 11px; }
+.network-access-note .text-button { min-height: 36px; padding: 0 2px; color: var(--primary); font-size: 12px; }
+.application-update-card { flex: 1; align-items: center; padding: 14px; border-radius: 11px; background: var(--surface); }
+.application-update-card strong { margin-top: 3px; font-size: 15px; }
+.system-meta-label { color: var(--text-muted); font-size: 11px; font-weight: 700; }
+.application-update-status { gap: 10px; }
+.system-update-current { color: var(--success); font-size: 12px; font-weight: 700; }
+.system-update-available { color: var(--text-muted); font-size: 12px; }
+.system-update-button { min-height: 40px; padding-inline: 12px; font-size: 12px; }
+.system-safety-note { display: flex; align-items: flex-start; gap: 9px; margin-top: 14px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); color: var(--text-muted); }
+.system-safety-note > span { display: grid; flex: 0 0 18px; width: 18px; height: 18px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--bg); font-size: 12px; font-weight: 900; }
+.system-safety-note p { margin: 1px 0 0; font-size: 11px; line-height: 1.45; }
+.system-form-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.system-form-footer p { margin: 0; color: var(--text-muted); font-size: 11px; }
+.system-form-footer .primary-button { flex: 0 0 auto; min-width: 258px; }
+
+@media (max-width: 1200px) {
+    .system-config-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .system-hardware-section { grid-column: 1 / -1; grid-row: auto; }
+}
+
+@media (max-width: 700px) {
+    .system-hero { padding: 18px; }
+    .system-config-grid, .system-choice-grid { grid-template-columns: 1fr; }
+    .system-hardware-section { grid-column: auto; }
+    .system-form-footer { align-items: stretch; flex-direction: column; }
+    .system-form-footer .primary-button { width: 100%; min-width: 0; }
+}
+
+/* Hallmark · app-surface alignment · settings tabs share the System workbench rhythm. */
+.settings-list-view { grid-template-rows: minmax(0, 1fr); gap: 16px; }
+.settings-workbench { display: flex; flex-direction: column; height: 100%; padding: 18px; }
+.settings-list-header { min-height: 0; align-items: center; padding: 2px 0; }
+.settings-list-title { display: flex; min-width: 0; align-items: center; gap: 14px; }
+.settings-list-icon { display: grid; flex: 0 0 42px; width: 42px; height: 42px; place-items: center; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-soft); color: var(--primary); }
+.settings-list-icon svg { width: 21px; height: 21px; }
+.settings-list-header h1 { margin: 0; font-size: 24px; }
+.settings-list-header p { max-width: 62ch; margin-top: 3px; line-height: 1.4; }
+.settings-header-actions { gap: 8px; }
+.settings-header-actions .primary-button, .cleaning-mode-button { min-height: 44px; border-radius: 11px; }
+.settings-workbench .list-card { min-height: 0; flex: 1; margin-top: 18px; overflow: auto; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); }
+.list-card .data-list { padding: 6px 14px; }
+.list-card .empty-state { min-height: 200px; }
+.data-row { min-height: 70px; padding: 10px 4px; }
+.data-row-heading { gap: 10px; }
+.data-row-heading strong { font-weight: 730; }
+.data-row-subtitle { font-size: 12px; }
+.row-actions { gap: 6px; padding-left: 14px; border-left: 1px solid var(--line); }
+.row-actions button { width: 42px; height: 42px; border-color: transparent; background: var(--surface-soft); }
+.row-actions button:hover, .row-actions button:focus-visible { border-color: var(--primary); background: var(--surface-strong); }
+.row-actions button.delete:hover, .row-actions button.delete:focus-visible { border-color: var(--danger); }
+
+@media (max-width: 700px) {
+    .settings-list-header { align-items: stretch; flex-direction: column; gap: 12px; }
+    .settings-list-title { align-items: flex-start; }
+    .settings-header-actions { width: 100%; }
+    .settings-header-actions button { flex: 1; justify-content: center; }
+    .list-card .data-list { padding: 4px 12px; }
+}
+
+/* Network PIN: a compact, touch-first setup flow without a redundant continue action. */
+.network-pin-setup-dialog { width: min(620px, calc(100vw - 28px)); }
+.network-pin-setup-dialog .settings-dialog-header { min-height: 70px; padding: 14px 18px; }
+.settings-dialog-heading { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.settings-dialog-heading-icon { display: grid; flex: 0 0 32px; width: 32px; height: 32px; place-items: center; border-radius: 10px; background: var(--surface-soft); color: var(--primary); }
+.settings-dialog-heading-icon svg { width: 18px; height: 18px; }
+.network-pin-setup-dialog .settings-dialog-body { padding: 18px; }
+.network-pin-setup-form { gap: 16px; }
+.network-pin-setup-lead { display: flex; align-items: center; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.network-pin-setup-lead .network-pin-setup-icon { flex: 0 0 40px; width: 40px; height: 40px; margin: 0; border-radius: 11px; }
+.network-pin-setup-lead .network-pin-setup-copy { max-width: none; margin: 0; font-size: 13px; line-height: 1.45; }
+.network-pin-setup-form .network-pin-step { grid-template-columns: minmax(0, 1fr) 220px; grid-template-rows: auto auto 1fr; column-gap: 20px; align-items: end; }
+.network-pin-step-count { margin-bottom: 6px; color: var(--primary); }
+.network-pin-step .pin-entry { gap: 8px; }
+.network-pin-step .pin-entry input { height: 44px; border-radius: 10px; font-size: 20px; }
+.network-pin-setup-dialog .network-pin-step .pin-keypad { grid-column: 2; grid-row: 1 / span 3; width: 220px; margin: 0; gap: 9px; }
+.network-pin-setup-dialog .pin-keypad button { min-height: 54px; border-radius: 12px; font-size: 21px; }
+.network-pin-setup-form .network-pin-error { min-height: 0; margin: -4px 0 0; }
+.network-pin-setup-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); }
+.network-pin-setup-actions > span { color: var(--text-muted); font-size: 11px; line-height: 1.4; }
+.network-pin-setup-actions .secondary-button { flex: 0 0 auto; min-height: 42px; padding-inline: 15px; }
+
+@media (max-width: 479px) {
+    .network-pin-setup-dialog .settings-dialog-body { padding: 16px; }
+    .network-pin-setup-form .network-pin-step { grid-template-columns: 1fr; grid-template-rows: auto; gap: 10px; }
+    .network-pin-setup-dialog .network-pin-step .pin-keypad { grid-column: auto; grid-row: auto; width: min(100%, 312px); margin: 2px auto 0; }
+    .network-pin-setup-actions { align-items: stretch; flex-direction: column; }
+    .network-pin-setup-actions .secondary-button { width: 100%; }
+}
+
+/* External access: centered 1024 × 600 kiosk PIN entry with the keypad as the primary action. */
+.network-pin-gate { width: 100%; min-height: calc(100dvh - var(--header-height)); padding: 16px; box-sizing: border-box; }
+.network-pin-form { display: grid; width: 100%; place-items: center; }
+.network-pin-gate-card { display: grid; grid-template-columns: minmax(0, 1fr) 248px; align-items: center; width: min(650px, 100%); padding: 22px; border-radius: 16px; box-sizing: border-box; }
+.network-pin-login-copy { min-width: 0; padding-right: 22px; }
+.network-pin-gate-icon { width: 40px; height: 40px; margin-bottom: 14px; border-radius: 11px; }
+.network-pin-gate-card h1 { font-size: 25px; }
+.network-pin-gate-card p { max-width: 32ch; margin: 5px 0 16px; font-size: 13px; line-height: 1.45; }
+.network-pin-login-copy .pin-entry { gap: 8px; }
+.network-pin-login-copy .pin-entry input { height: 52px; border-radius: 11px; font-size: 23px; }
+.network-pin-login-keypad { padding-left: 22px; border-left: 1px solid var(--line); }
+.network-pin-login-keypad .pin-keypad { margin: 0; gap: 10px; }
+.network-pin-login-keypad .pin-keypad button { min-height: 54px; margin: 0; border-radius: 12px; font-size: 20px; }
+.network-pin-auto-hint { display: block; margin-top: 12px; color: var(--text-muted); font-size: 11px; line-height: 1.4; }
+.network-pin-gate-card .network-pin-error { min-height: 18px; margin: 8px 0 -2px; }
+
+@media (max-width: 640px) {
+    .network-pin-gate { align-items: start; padding: 14px; }
+    .network-pin-gate-card { grid-template-columns: 1fr; gap: 18px; padding: 18px; }
+    .network-pin-login-copy { padding-right: 0; }
+    .network-pin-login-keypad { padding: 18px 0 0; border-top: 1px solid var(--line); border-left: 0; }
+    .network-pin-login-keypad .pin-keypad { max-width: 360px; margin-inline: auto; }
 }
