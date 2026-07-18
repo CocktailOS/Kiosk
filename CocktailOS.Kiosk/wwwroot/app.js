@@ -22,6 +22,9 @@
         completionTimer: null,
         primingPollTimer: null
     };
+    let virtualKeyboard = null;
+    let virtualKeyboardTarget = null;
+    let virtualKeyboardShift = false;
 
     const icons = {
         sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>',
@@ -71,6 +74,7 @@
     ];
 
     document.addEventListener('DOMContentLoaded', initialize);
+    document.addEventListener('DOMContentLoaded', setupVirtualKeyboard);
     window.addEventListener('hashchange', renderRoute);
 
     async function initialize() {
@@ -104,10 +108,6 @@
 
     function pinEntryMarkup(id, label, autocomplete = 'off') {
         return `<div class="pin-entry" id="${id}" role="group" aria-label="${escapeHtml(label)}">${[0, 1, 2, 3].map(index => `<input type="password" inputmode="numeric" pattern="[0-9]" maxlength="1" data-pin-digit aria-label="${escapeHtml(label)}, Ziffer ${index + 1}" autocomplete="${index === 0 ? autocomplete : 'off'}">`).join('')}</div>`;
-    }
-
-    function pinKeypadMarkup(label) {
-        return `<div class="pin-keypad" role="group" aria-label="${escapeHtml(label)}">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(digit => `<button type="button" data-pin-key="${digit}" aria-label="Ziffer ${digit}">${digit}</button>`).join('')}<span aria-hidden="true"></span><button type="button" data-pin-key="0" aria-label="Ziffer 0">0</button><button type="button" class="pin-keypad-delete" data-pin-delete aria-label="Letzte Ziffer löschen">⌫</button></div>`;
     }
 
     function bindPinEntry(container) {
@@ -168,27 +168,18 @@
         };
     }
 
-    function bindPinKeypad(keypad, pinEntry) {
-        keypad.addEventListener('click', event => {
-            const button = event.target.closest('button');
-            if (!button) return;
-            if (button.hasAttribute('data-pin-delete')) pinEntry.backspace();
-            else pinEntry.append(button.dataset.pinKey);
-        });
-    }
-
     function renderNetworkPinPrompt() {
-        app.innerHTML = `${headerTemplate()}<main class="network-pin-gate" id="app-main"><form class="network-pin-form"><section class="network-pin-gate-card"><div class="network-pin-login-copy"><span class="network-pin-gate-icon" aria-hidden="true">${icons.lock}</span><h1>PIN eingeben</h1><p>Diese CocktailOS-Station ist über das Netzwerk geschützt.</p><span class="pin-entry-label">4-stelliger PIN</span>${pinEntryMarkup('network-login-pin', 'Netzwerk-PIN', 'one-time-code')}<p class="network-pin-error" role="alert" hidden></p><span class="network-pin-auto-hint">Nach der vierten Ziffer wird der Zugang geöffnet.</span></div><div class="network-pin-login-keypad">${pinKeypadMarkup('Zahlenfeld für Netzwerk-PIN')}</div></section></form></main>`;
+        app.innerHTML = `${headerTemplate()}<main class="network-pin-gate" id="app-main"><form class="network-pin-form"><section class="network-pin-gate-card"><div class="network-pin-login-copy"><span class="network-pin-gate-icon" aria-hidden="true">${icons.lock}</span><h1>PIN eingeben</h1><p>Diese CocktailOS-Station ist über das Netzwerk geschützt.</p><span class="pin-entry-label">4-stelliger PIN</span>${pinEntryMarkup('network-login-pin', 'Netzwerk-PIN', 'one-time-code')}<p class="network-pin-error" role="alert" hidden></p><span class="network-pin-auto-hint">Nach der vierten Ziffer wird der Zugang geöffnet.</span></div></section></form></main>`;
         const form = app.querySelector('.network-pin-form');
         const pinEntry = bindPinEntry(form.querySelector('.pin-entry'));
-        bindPinKeypad(form.querySelector('.pin-keypad'), pinEntry);
         const error = form.querySelector('.network-pin-error');
-        const controls = [...form.querySelectorAll('input, .pin-keypad button')];
+        const controls = [...form.querySelectorAll('input')];
         let isAuthenticating = false;
         const authenticate = async () => {
             const pin = pinEntry.value();
             if (!/^\d{4}$/.test(pin) || isAuthenticating) return;
             isAuthenticating = true;
+            hideVirtualKeyboard();
             controls.forEach(control => { control.disabled = true; });
             error.hidden = true;
             try {
@@ -216,12 +207,11 @@
 
     function openNetworkPinSetupDialog({ onSave, onCancel }) {
         const layer = createSettingsDialog('network-pin-setup-dialog', { dismissible: false });
-        const body = `<form class="network-pin-setup-form"><div class="network-pin-step"><span class="network-pin-step-count">Schritt <span data-pin-step-number>1</span> von 2</span><span class="pin-entry-label" data-pin-step-label>PIN festlegen</span>${pinEntryMarkup('network-setup-pin', 'Neuer Netzwerk-PIN', 'new-password')}${pinKeypadMarkup('Zahlenfeld für neuen Netzwerk-PIN')}</div><p class="network-pin-error" role="alert" hidden></p><div class="network-pin-setup-actions"><span>Nach der vierten Ziffer geht es automatisch weiter.</span><button type="button" class="secondary-button network-pin-cancel">Abbrechen</button></div></form>`;
+        const body = `<form class="network-pin-setup-form"><div class="network-pin-step"><span class="network-pin-step-count">Schritt <span data-pin-step-number>1</span> von 2</span><span class="pin-entry-label" data-pin-step-label>PIN festlegen</span>${pinEntryMarkup('network-setup-pin', 'Neuer Netzwerk-PIN', 'new-password')}</div><p class="network-pin-error" role="alert" hidden></p><div class="network-pin-setup-actions"><span>Nach der vierten Ziffer geht es automatisch weiter.</span><button type="button" class="secondary-button network-pin-cancel">Abbrechen</button></div></form>`;
         setSettingsDialogContent(layer, 'Netzwerk-PIN festlegen', 'Lege einen vierstelligen PIN fest. Geräte im Netzwerk brauchen ihn, bevor sie CocktailOS öffnen können.', body, { showClose: false, headingIcon: icons.lock });
         const form = layer.querySelector('.network-pin-setup-form');
         const error = form.querySelector('.network-pin-error');
         const pinEntry = bindPinEntry(form.querySelector('#network-setup-pin'));
-        bindPinKeypad(form.querySelector('.pin-keypad'), pinEntry);
         let firstPin = '';
         let confirming = false;
         let isAdvancing = false;
@@ -1213,6 +1203,107 @@
 
     function settingsListTemplate(title, intro, addLabel, content, icon) {
         return `<div class="settings-list-view"><section class="settings-card settings-workbench" aria-label="${escapeHtml(title)}"><header class="settings-list-header"><div class="settings-list-title"><span class="settings-list-icon" aria-hidden="true">${icon}</span><div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(intro)}</p></div></div><div class="settings-header-actions"><button type="button" class="primary-button add-entity">${icons.plus}<span>${escapeHtml(addLabel)}</span></button></div></header><div class="list-card"><div class="data-list">${content}</div></div></section></div>`;
+    }
+
+    function setupVirtualKeyboard() {
+        virtualKeyboard = document.createElement('section');
+        virtualKeyboard.className = 'virtual-keyboard';
+        virtualKeyboard.hidden = true;
+        virtualKeyboard.setAttribute('aria-label', 'Bildschirmtastatur');
+        document.body.append(virtualKeyboard);
+
+        document.addEventListener('focusin', event => {
+            if (isVirtualKeyboardInput(event.target)) showVirtualKeyboard(event.target);
+        });
+        document.addEventListener('pointerdown', event => {
+            if (!virtualKeyboardTarget || virtualKeyboard.contains(event.target) || event.target === virtualKeyboardTarget) return;
+            hideVirtualKeyboard();
+        });
+        virtualKeyboard.addEventListener('pointerdown', event => event.preventDefault());
+        virtualKeyboard.addEventListener('click', event => {
+            const button = event.target.closest('[data-virtual-key]');
+            if (!button || !virtualKeyboardTarget) return;
+            applyVirtualKey(button.dataset.virtualKey);
+        });
+    }
+
+    function isVirtualKeyboardInput(element) {
+        if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) return false;
+        if (element.disabled || element.readOnly) return false;
+        if (element.matches('[data-pin-digit]')) return true;
+        if (element.matches('[type="hidden"], [type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="password"]')) return false;
+        if (element instanceof HTMLInputElement && !['text', 'search', 'email', 'url', 'tel', 'number'].includes(element.type)) return false;
+        return true;
+    }
+
+    function showVirtualKeyboard(element) {
+        if (element instanceof HTMLInputElement && element.type === 'number') {
+            element.dataset.virtualKeyboardOriginalType = 'number';
+            element.type = 'text';
+        }
+        virtualKeyboardTarget = element;
+        virtualKeyboardShift = false;
+        renderVirtualKeyboard();
+        virtualKeyboard.hidden = false;
+    }
+
+    function hideVirtualKeyboard() {
+        if (!virtualKeyboard) return;
+        if (virtualKeyboardTarget instanceof HTMLInputElement && virtualKeyboardTarget.dataset.virtualKeyboardOriginalType === 'number') {
+            const normalized = virtualKeyboardTarget.value.replace(',', '.').replace(/\.$/, '');
+            virtualKeyboardTarget.value = normalized === '-' ? '' : normalized;
+            virtualKeyboardTarget.type = 'number';
+            delete virtualKeyboardTarget.dataset.virtualKeyboardOriginalType;
+        }
+        virtualKeyboard.hidden = true;
+        virtualKeyboardTarget = null;
+    }
+
+    function renderVirtualKeyboard() {
+        if (!virtualKeyboardTarget) return;
+        const numeric = virtualKeyboardTarget instanceof HTMLInputElement && (virtualKeyboardTarget.matches('[data-pin-digit]') || virtualKeyboardTarget.dataset.virtualKeyboardOriginalType === 'number' || virtualKeyboardTarget.type === 'number' || ['numeric', 'decimal'].includes(virtualKeyboardTarget.inputMode));
+        const rows = numeric
+            ? [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], [virtualKeyboardTarget.inputMode === 'decimal' ? ',' : 'blank', '0', 'backspace']]
+            : [['q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p', 'ü'], ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'ö', 'ä'], ['shift', 'y', 'x', 'c', 'v', 'b', 'n', 'm', 'ß', 'backspace'], ['space', '.', 'enter']];
+        const label = key => ({ backspace: 'Löschen', enter: 'Fertig', shift: virtualKeyboardShift ? '⇧' : '⇧', space: 'Leerzeichen' }[key] || (virtualKeyboardShift ? key.toUpperCase() : key));
+        const display = key => ({ backspace: '⌫', enter: 'Fertig', shift: '⇧', space: 'Leertaste' }[key] || (virtualKeyboardShift ? key.toUpperCase() : key));
+        const keyMarkup = key => key === 'blank'
+            ? '<span class="virtual-key-spacer" aria-hidden="true"></span>'
+            : `<button type="button" class="virtual-key ${key}" data-virtual-key="${key}" aria-label="${escapeHtml(label(key))}">${escapeHtml(display(key))}</button>`;
+        virtualKeyboard.classList.toggle('is-numeric', numeric);
+        virtualKeyboard.innerHTML = `<div class="virtual-keyboard-header"><span>${numeric ? 'Zahlen eingeben' : 'Text eingeben'}</span><button type="button" data-virtual-key="enter">Fertig</button></div><div class="virtual-keyboard-keys">${rows.map(row => `<div class="virtual-keyboard-row">${row.map(keyMarkup).join('')}</div>`).join('')}</div>`;
+    }
+
+    function applyVirtualKey(key) {
+        const target = virtualKeyboardTarget;
+        if (!target) return;
+        if (key === 'enter') {
+            target.dispatchEvent(new Event('change', { bubbles: true }));
+            target.blur();
+            hideVirtualKeyboard();
+            return;
+        }
+        if (key === 'shift') {
+            virtualKeyboardShift = !virtualKeyboardShift;
+            renderVirtualKeyboard();
+            return;
+        }
+        const start = target.selectionStart ?? target.value.length;
+        const end = target.selectionEnd ?? start;
+        const isNativeNumber = target instanceof HTMLInputElement && (target.type === 'number' || target.dataset.virtualKeyboardOriginalType === 'number');
+        if (key === 'backspace') {
+            if (start !== end) target.setRangeText('', start, end, 'end');
+            else if (start > 0) target.setRangeText('', start - 1, start, 'end');
+        } else {
+            const value = key === 'space' ? ' ' : key === ',' && isNativeNumber ? '.' : virtualKeyboardShift ? key.toUpperCase() : key;
+            target.setRangeText(value, start, end, 'end');
+            if (virtualKeyboardShift) {
+                virtualKeyboardShift = false;
+                renderVirtualKeyboard();
+            }
+        }
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+        if (document.activeElement === target) target.focus({ preventScroll: true });
     }
 
     function createSettingsDialog(className = '', options = {}) {

@@ -1649,3 +1649,38 @@ button, .primary-button, .secondary-button, .danger-button, .tab-button { white-
     .network-pin-login-keypad { padding: 18px 0 0; border-top: 1px solid var(--line); border-left: 0; }
     .network-pin-login-keypad .pin-keypad { max-width: 360px; margin-inline: auto; }
 }
+
+/* Touch keyboard for form fields. */
+.virtual-keyboard { position: fixed; z-index: 1500; right: 50%; bottom: 12px; width: min(820px, calc(100vw - 24px)); padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 20px 48px rgba(0,0,0,.34); transform: translateX(50%); }
+.virtual-keyboard[hidden] { display: none; }
+.virtual-keyboard-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px 10px; color: var(--text-muted); font-size: 12px; font-weight: 700; }
+.virtual-keyboard-header button { min-height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); color: var(--text); font-weight: 750; }
+.virtual-keyboard-keys { display: grid; gap: 7px; }
+.virtual-keyboard-row { display: flex; width: 100%; justify-content: center; gap: 7px; }
+.virtual-key { flex: 1 1 0; min-width: 0; min-height: 48px; padding: 0 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); color: var(--text); font-size: 17px; font-weight: 750; }
+.virtual-key:hover, .virtual-key:focus-visible, .virtual-keyboard-header button:hover, .virtual-keyboard-header button:focus-visible { border-color: var(--primary); background: var(--surface-strong); outline: none; }
+.virtual-key:active { background: var(--primary); color: var(--hall-accent-ink); }
+.virtual-key.shift, .virtual-key.backspace { flex: 1.45 1 0; }
+.virtual-key.space { flex: 4.8 1 0; }
+.virtual-key.enter { flex: 2.2 1 0; border-color: var(--primary); background: var(--primary); color: var(--hall-accent-ink); }
+.virtual-keyboard.is-numeric { width: min(390px, calc(100vw - 24px)); }
+.virtual-keyboard.is-numeric .virtual-keyboard-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: min(100%, 320px); margin-inline: auto; }
+.virtual-keyboard.is-numeric .virtual-key, .virtual-keyboard.is-numeric .virtual-key-spacer { width: 100%; min-height: 52px; }
+.virtual-keyboard.is-numeric .virtual-key.enter { flex: 1 1 auto; }
+.virtual-key-spacer { flex: 1 1 0; }
+
+@media (max-width: 620px) {
+    .virtual-keyboard { right: 6px; bottom: 6px; width: calc(100vw - 12px); padding: 8px; transform: none; }
+    .virtual-keyboard-keys, .virtual-keyboard-row { gap: 5px; }
+    .virtual-key { min-height: 44px; padding: 0 4px; font-size: 15px; }
+}
+
+/* PIN pads use the same stable three-column touch grid as numeric inputs. */
+.pin-keypad { grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+.pin-keypad button { min-width: 0; margin: 0; }
+.pin-keypad > span { min-width: 0; }
+
+/* PIN entry now uses the shared on-screen numeric keyboard instead of an embedded keypad. */
+.network-pin-gate-card { grid-template-columns: 1fr; width: min(430px, 100%); }
+.network-pin-login-copy { padding-right: 0; }
+.network-pin-setup-form .network-pin-step { grid-template-columns: 1fr; grid-template-rows: auto; }
