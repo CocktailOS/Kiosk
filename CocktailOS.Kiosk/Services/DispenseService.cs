@@ -182,7 +182,7 @@ public sealed class DispenseService(
             {
                 try
                 {
-                    await ApplyInventoryConsumptionAsync(plan);
+                    await ApplyInventoryConsumptionAsync(plan, finalStatus == DispenseStatuses.Completed);
                 }
                 catch (Exception exception)
                 {
@@ -237,16 +237,18 @@ public sealed class DispenseService(
         }
     }
 
-    private async Task ApplyInventoryConsumptionAsync(DispensePlan plan)
+    private async Task ApplyInventoryConsumptionAsync(DispensePlan plan, bool completed)
     {
         var consumption = plan.Steps
             .Where(x => x.IngredientId is not null && x.FlowRateMlPerSecond > 0)
             .Select(x => new
             {
                 IngredientId = x.IngredientId!.Value,
-                AmountMl = decimal.Round(
-                    Math.Min(x.AmountMl, (decimal)plan.ActualRunSeconds.GetValueOrDefault(x.Channel.PumpId) * x.FlowRateMlPerSecond),
-                    2)
+                AmountMl = completed
+                    ? x.AmountMl
+                    : decimal.Round(
+                        Math.Min(x.AmountMl, (decimal)plan.ActualRunSeconds.GetValueOrDefault(x.Channel.PumpId) * x.FlowRateMlPerSecond),
+                        2)
             })
             .Where(x => x.AmountMl > 0)
             .ToArray();
