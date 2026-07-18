@@ -57,6 +57,22 @@ Die Anwendung ist anschließend standardmäßig unter `http://localhost:5276` er
 
 Das Installationsskript lädt die aktuelle ARM64-Release, prüft deren Prüfsumme, richtet den systemd-Dienst ein und erhält bei Updates die SQLite-Datenbank sowie hochgeladene Bilder. Für den Displaybetrieb wird der Bildschirm auf 1024 × 600 konfiguriert. Nach der ersten Installation ist ein Neustart erforderlich.
 
+### Standardinstallation mit Display
+
+Ohne Option startet CocktailOS über Cage und Chromium auf dem angeschlossenen Bildschirm. Der Zugriff aus dem Netzwerk ist standardmäßig deaktiviert und kann später unter **Einstellungen → System → Netzwerkzugriff** aktiviert werden.
+
+Für die normale Installation mit angeschlossenem Display genügt dieser Befehl:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash
+```
+
+Nach einer Installation mit Display bitte einmal neu starten:
+
+```bash
+sudo reboot
+```
+
 ### Ohne angeschlossenes Display
 
 Startet ausschließlich die API. Der Netzwerkzugriff ist dabei direkt aktiviert und durch einen selbst gewählten vierstelligen PIN geschützt. Der PIN wird beim ersten Start als Hash in der Datenbank hinterlegt; bei Updates bleiben die bestehende Konfiguration und der PIN unverändert.
@@ -66,16 +82,6 @@ curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | 
 ```
 
 Anschließend ist CocktailOS über `http://<IP-des-Pi>:5149` erreichbar. Verwende statt `1234` einen eigenen PIN.
-
-### Displaybetrieb
-
-Ohne Option startet CocktailOS über Cage und Chromium auf dem angeschlossenen Bildschirm. Der Zugriff aus dem Netzwerk ist standardmäßig deaktiviert und kann später unter **Einstellungen → System → Netzwerkzugriff** aktiviert werden.
-
-Nach einer Installation mit Display bitte einmal neu starten:
-
-```bash
-sudo reboot
-```
 
 ## Daten und Bilder
 
