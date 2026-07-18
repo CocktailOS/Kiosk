@@ -25,6 +25,7 @@
     let virtualKeyboard = null;
     let virtualKeyboardTarget = null;
     let virtualKeyboardShift = false;
+    let virtualKeyboardDrag = null;
 
     const icons = {
         sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>',
@@ -539,6 +540,7 @@
     }
 
     function closeLayer(layer) {
+        if (virtualKeyboardTarget && layer?.contains(virtualKeyboardTarget)) hideVirtualKeyboard();
         if (window.gsap && !reduceMotion) gsap.to(layer, { opacity: 0, duration: .16, onComplete: () => layer.remove() });
         else layer.remove();
     }
@@ -1211,6 +1213,9 @@
         virtualKeyboard.hidden = true;
         virtualKeyboard.setAttribute('aria-label', 'Bildschirmtastatur');
         document.body.append(virtualKeyboard);
+        new MutationObserver(() => {
+            if (virtualKeyboardTarget && !virtualKeyboardTarget.isConnected) hideVirtualKeyboard();
+        }).observe(app, { childList: true, subtree: true });
 
         document.addEventListener('focusin', event => {
             if (isVirtualKeyboardInput(event.target)) showVirtualKeyboard(event.target);
@@ -1219,7 +1224,37 @@
             if (!virtualKeyboardTarget || virtualKeyboard.contains(event.target) || event.target === virtualKeyboardTarget) return;
             hideVirtualKeyboard();
         });
-        virtualKeyboard.addEventListener('pointerdown', event => event.preventDefault());
+        virtualKeyboard.addEventListener('pointerdown', event => {
+            const dragHandle = event.target.closest('[data-virtual-keyboard-drag]');
+            if (!dragHandle) {
+                event.preventDefault();
+                return;
+            }
+
+            event.preventDefault();
+            const rect = virtualKeyboard.getBoundingClientRect();
+            virtualKeyboardDrag = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                rect
+            };
+            virtualKeyboard.classList.add('is-dragging');
+            dragHandle.setPointerCapture?.(event.pointerId);
+        });
+        document.addEventListener('pointermove', event => {
+            if (!virtualKeyboardDrag || event.pointerId !== virtualKeyboardDrag.pointerId) return;
+            const { rect, startX, startY } = virtualKeyboardDrag;
+            const margin = 6;
+            const offsetX = Math.min(Math.max(event.clientX - startX, margin - rect.left), window.innerWidth - rect.right - margin);
+            const offsetY = Math.min(Math.max(event.clientY - startY, margin - rect.top), window.innerHeight - rect.bottom - margin);
+            virtualKeyboard.style.translate = `${offsetX}px ${offsetY}px`;
+        });
+        document.addEventListener('pointerup', event => {
+            if (!virtualKeyboardDrag || event.pointerId !== virtualKeyboardDrag.pointerId) return;
+            virtualKeyboardDrag = null;
+            virtualKeyboard.classList.remove('is-dragging');
+        });
         virtualKeyboard.addEventListener('click', event => {
             const button = event.target.closest('[data-virtual-key]');
             if (!button || !virtualKeyboardTarget) return;
@@ -1241,10 +1276,15 @@
             element.dataset.virtualKeyboardOriginalType = 'number';
             element.type = 'text';
         }
+        const isPinEntry = element instanceof HTMLInputElement && element.matches('[data-pin-digit]');
+        if (!isPinEntry) resetVirtualKeyboardPosition();
         virtualKeyboardTarget = element;
         virtualKeyboardShift = false;
         renderVirtualKeyboard();
         virtualKeyboard.hidden = false;
+        requestAnimationFrame(() => {
+            if (isPinEntry) positionVirtualKeyboardForTarget(element);
+        });
     }
 
     function hideVirtualKeyboard() {
@@ -1257,6 +1297,8 @@
         }
         virtualKeyboard.hidden = true;
         virtualKeyboardTarget = null;
+        virtualKeyboardDrag = null;
+        virtualKeyboard.classList.remove('is-dragging');
     }
 
     function renderVirtualKeyboard() {
@@ -1271,7 +1313,69 @@
             ? '<span class="virtual-key-spacer" aria-hidden="true"></span>'
             : `<button type="button" class="virtual-key ${key}" data-virtual-key="${key}" aria-label="${escapeHtml(label(key))}">${escapeHtml(display(key))}</button>`;
         virtualKeyboard.classList.toggle('is-numeric', numeric);
-        virtualKeyboard.innerHTML = `<div class="virtual-keyboard-header"><span>${numeric ? 'Zahlen eingeben' : 'Text eingeben'}</span><button type="button" data-virtual-key="enter">Fertig</button></div><div class="virtual-keyboard-keys">${rows.map(row => `<div class="virtual-keyboard-row">${row.map(keyMarkup).join('')}</div>`).join('')}</div>`;
+        virtualKeyboard.classList.toggle('is-pin-keyboard', virtualKeyboardTarget instanceof HTMLInputElement && virtualKeyboardTarget.matches('[data-pin-digit]'));
+        virtualKeyboard.innerHTML = `<div class="virtual-keyboard-header"><button type="button" class="virtual-keyboard-drag-handle" data-virtual-keyboard-drag aria-label="Tastatur verschieben"></button><span>${numeric ? 'Zahlen eingeben' : 'Text eingeben'}</span><button type="button" data-virtual-key="enter">Fertig</button></div><div class="virtual-keyboard-keys">${rows.map(row => `<div class="virtual-keyboard-row">${row.map(keyMarkup).join('')}</div>`).join('')}</div>`;
+    }
+
+    function positionVirtualKeyboardForTarget(element) {
+        if (!(element instanceof HTMLInputElement) || !element.matches('[data-pin-digit]') || !virtualKeyboard || virtualKeyboard.hidden) return;
+        const pinEntry = element.closest('.pin-entry') || element;
+        const targetRect = pinEntry.getBoundingClientRect();
+        const pinSurface = element.closest('.network-pin-gate-card, .settings-dialog') || pinEntry;
+        const surfaceRect = pinSurface.getBoundingClientRect();
+        const compactLayout = window.innerWidth < 760;
+        virtualKeyboard.style.translate = '';
+        virtualKeyboard.style.width = compactLayout ? `${targetRect.width}px` : '';
+        const keyboardRect = virtualKeyboard.getBoundingClientRect();
+        const margin = 24;
+        const spaceRight = window.innerWidth - surfaceRect.right;
+        const spaceLeft = surfaceRect.left;
+        const canSitRight = spaceRight >= keyboardRect.width + margin;
+        const canSitLeft = spaceLeft >= keyboardRect.width + margin;
+        const maxLeft = Math.max(margin, window.innerWidth - keyboardRect.width - margin);
+        const left = compactLayout
+            ? targetRect.left
+            : canSitRight
+            ? surfaceRect.right + margin
+            : canSitLeft
+                ? surfaceRect.left - keyboardRect.width - margin
+                : Math.min(maxLeft, Math.max(margin, surfaceRect.left));
+        const fitsBelow = window.innerHeight - targetRect.bottom >= keyboardRect.height + margin;
+        const top = compactLayout
+            ? targetRect.bottom + margin
+            : (canSitRight || canSitLeft)
+            ? surfaceRect.top
+            : fitsBelow
+                ? targetRect.bottom + margin
+                : Math.max(margin, targetRect.top - keyboardRect.height - margin);
+        setVirtualKeyboardPosition(left, top, keyboardRect.width, keyboardRect.height);
+    }
+
+    function setVirtualKeyboardPosition(left, top, width = null, height = null) {
+        if (!virtualKeyboard) return;
+        const rect = virtualKeyboard.getBoundingClientRect();
+        const keyboardWidth = width ?? rect.width;
+        const keyboardHeight = height ?? rect.height;
+        const margin = 6;
+        const safeLeft = Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - keyboardWidth - margin));
+        const safeTop = Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - keyboardHeight - margin));
+        virtualKeyboard.style.left = `${safeLeft}px`;
+        virtualKeyboard.style.top = `${safeTop}px`;
+        virtualKeyboard.style.right = 'auto';
+        virtualKeyboard.style.bottom = 'auto';
+        virtualKeyboard.style.transform = 'none';
+        virtualKeyboard.style.translate = 'none';
+    }
+
+    function resetVirtualKeyboardPosition() {
+        if (!virtualKeyboard) return;
+        virtualKeyboard.style.left = '';
+        virtualKeyboard.style.top = '';
+        virtualKeyboard.style.right = '';
+        virtualKeyboard.style.bottom = '';
+        virtualKeyboard.style.transform = '';
+        virtualKeyboard.style.translate = '';
+        virtualKeyboard.style.width = '';
     }
 
     function applyVirtualKey(key) {
@@ -1292,6 +1396,15 @@
         const end = target.selectionEnd ?? start;
         const isNativeNumber = target instanceof HTMLInputElement && (target.type === 'number' || target.dataset.virtualKeyboardOriginalType === 'number');
         if (key === 'backspace') {
+            if (target instanceof HTMLInputElement && target.matches('[data-pin-digit]') && !target.value) {
+                const inputs = [...target.closest('.pin-entry')?.querySelectorAll('[data-pin-digit]') || []];
+                const previous = inputs[inputs.indexOf(target) - 1];
+                if (!previous) return;
+                previous.value = '';
+                previous.focus();
+                previous.dispatchEvent(new Event('input', { bubbles: true }));
+                return;
+            }
             if (start !== end) target.setRangeText('', start, end, 'end');
             else if (start > 0) target.setRangeText('', start - 1, start, 'end');
         } else {
@@ -1346,6 +1459,7 @@
             state.editing = null;
             state.cocktailDraft = null;
         }
+        if (virtualKeyboardTarget && layer.contains(virtualKeyboardTarget)) hideVirtualKeyboard();
         closeLayer(layer);
         setTimeout(() => { if (returnFocus?.isConnected) returnFocus.focus(); }, 180);
     }
