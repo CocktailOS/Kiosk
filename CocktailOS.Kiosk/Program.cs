@@ -134,7 +134,7 @@ await app.RunAsync();
 
 static bool IsPublicNetworkAccessPath(PathString path) =>
     path == "/" || path == "/index.html" || path == "/app.css" || path == "/tokens.css" || path == "/app.js"
-    || path.StartsWithSegments("/assets") || path == "/api/network-access/status" || path == "/api/network-access/authenticate"
+    || path.StartsWithSegments("/assets") || path.StartsWithSegments("/vendor") || path == "/api/network-access/status" || path == "/api/network-access/authenticate"
     || path == "/api/admin-access/status" || path == "/api/admin-access/setup" || path == "/api/admin-access/authenticate";
 
 static bool IsAdminMutation(HttpRequest request)

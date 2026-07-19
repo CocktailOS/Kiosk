@@ -31,34 +31,13 @@
     let virtualKeyboardTouchFocusTarget = null;
     let virtualKeyboardTouchActivationPending = false;
     let virtualKeyboardTouchActivationTimer = null;
+    let virtualKeyboardSuppressClickUntil = 0;
 
+    const lucideIcon = name => window.CocktailLucide.icon(name);
     const icons = {
-        sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>',
-        moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5 8.5 8.5 0 1 0 20.5 14.1Z"/></svg>',
-        logo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 3h14l-6 7v7.5"/><path d="M8.5 21h7M12 17.5V21M7.2 6h9.6"/></svg>',
-        settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.55V21h-4v-.08A1.7 1.7 0 0 0 8.97 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.52-1.03H3v-4h.08A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88L4.2 7l2.83-2.83.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 10 3.05V3h4v.08a1.7 1.7 0 0 0 1.03 1.52 1.7 1.7 0 0 0 1.88-.34l.06-.06L19.8 7l-.06.06a1.7 1.7 0 0 0-.34 1.88A1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z"/></svg>',
-        close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>',
-        play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m8 5 11 7-11 7z"/></svg>',
-        stop: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>',
-        back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>',
-        edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 16-.8 4.8L8 20l11-11-4-4zM13.5 6.5l4 4"/></svg>',
-        trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M9 3h6l1 4H8zM6 7l1 14h10l1-14M10 11v6M14 11v6"/></svg>',
-        plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
-        clean: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3S6.5 9.1 6.5 14a5.5 5.5 0 0 0 11 0C17.5 9.1 12 3 12 3Z"/><path d="M9.4 15.2a2.8 2.8 0 0 0 2.8 2.2"/></svg>',
-        prime: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 20V8.5a6 6 0 0 1 12 0V20"/><path d="M3 20h18M9 12h6M12 4v8"/><path d="M12 16v2"/></svg>',
-        raspberryPi: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 8h8v8H8zM2 9h2M2 15h2M20 9h2M20 15h2M9 2v2M15 2v2M9 20v2M15 20v2"/></svg>',
-        download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>',
-        update: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.8-4L3 10"/><path d="M3 4v6h6"/><path d="M4 13a8 8 0 0 0 14.8 4L21 14"/><path d="M21 20v-6h-6"/></svg>',
-        archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h16v15H4z"/><path d="M3 5V2h18v3M9 10h6M9 14h6"/></svg>',
-        backupDownload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h16v15H4z"/><path d="M12 8v7M9 12l3 3 3-3M8 19h8"/></svg>',
-        backupRestore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h16v15H4z"/><path d="M12 16V9M9 12l3-3 3 3M8 19h8"/></svg>',
-        tour: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="m15.5 8.5-2.1 4.8-4.8 2.1 2.1-4.8z"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>',
-        calibrate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="m12 13 4-4"/><path d="M6 17h12"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></svg>',
-        lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/></svg>',
-        refill: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3S6.5 9.1 6.5 14a5.5 5.5 0 0 0 11 0C17.5 9.1 12 3 12 3Z"/><path d="M12 10v7M8.5 13.5h7"/></svg>',
-        cocktail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 4h16l-7 8v7"/><path d="M8 22h8M12 19v3M7 8h10"/></svg>',
-        ingredient: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3S6.5 9.1 6.5 14a5.5 5.5 0 0 0 11 0C17.5 9.1 12 3 12 3Z"/><path d="M9.5 15.5a3 3 0 0 0 2.8 2"/></svg>',
-        size: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3h12l-1 18H7L6 3Z"/><path d="M7 8h10M8 13h8"/></svg>'
+        sun: lucideIcon('sun'), moon: lucideIcon('moon'), logo: lucideIcon('martini'),
+        settings: lucideIcon('settings'), close: lucideIcon('x'), play: lucideIcon('play'), stop: lucideIcon('square'), back: lucideIcon('chevron-left'), edit: lucideIcon('pencil'), trash: lucideIcon('trash-2'), plus: lucideIcon('plus'),
+        clean: lucideIcon('droplets'), prime: lucideIcon('syringe'), raspberryPi: lucideIcon('cpu'), download: lucideIcon('download'), update: lucideIcon('refresh-cw'), archive: lucideIcon('archive'), backupDownload: lucideIcon('download'), backupRestore: lucideIcon('archive-restore'), tour: lucideIcon('compass'), calibrate: lucideIcon('gauge'), lock: lucideIcon('lock-keyhole'), refill: lucideIcon('circle-plus'), cocktail: lucideIcon('martini'), ingredient: lucideIcon('droplet'), size: lucideIcon('ruler'), check: lucideIcon('circle-check')
     };
 
     const raspberryPiHeader = [
@@ -660,7 +639,7 @@
         clearInterval(state.pollTimer);
         const layer = document.querySelector('.modal-layer');
         if (!layer || layer.querySelector('.success-state')) return;
-        layer.innerHTML = `<div class="modal-scrim"></div><section class="success-state" role="status"><div><svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="8" aria-hidden="true"><circle class="check-circle" cx="60" cy="60" r="48"/><path class="check-path" d="m36 61 16 16 34-38"/></svg><h2>Fertig gemixt</h2><p>${escapeHtml(status.cocktailName || 'Dein Cocktail')} ist bereit. Prost!</p></div></section>`;
+        layer.innerHTML = `<div class="modal-scrim"></div><section class="success-state" role="status"><div>${icons.check}<h2>Fertig gemixt</h2><p>${escapeHtml(status.cocktailName || 'Dein Cocktail')} ist bereit. Prost!</p></div></section>`;
         if (window.gsap && !reduceMotion) {
             gsap.set('.check-circle', { strokeDasharray: 320, strokeDashoffset: 320 });
             gsap.timeline()
@@ -1287,7 +1266,7 @@
         clearInterval(state.pollTimer);
         const layer = document.querySelector('.modal-layer');
         if (!layer || layer.querySelector('.success-state')) return;
-        layer.innerHTML = `<div class="modal-scrim"></div><section class="success-state cleaning-success" role="status"><div><svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="8" aria-hidden="true"><circle class="check-circle" cx="60" cy="60" r="48"/><path class="check-path" d="m36 61 16 16 34-38"/></svg><h2>Reinigung abgeschlossen</h2><p>Alle ausgewählten Pumpen sind gespült und ausgeschaltet.</p><button type="button" class="primary-button cleaning-done">Zurück zu den Pumpen</button></div></section>`;
+        layer.innerHTML = `<div class="modal-scrim"></div><section class="success-state cleaning-success" role="status"><div>${icons.check}<h2>Reinigung abgeschlossen</h2><p>Alle ausgewählten Pumpen sind gespült und ausgeschaltet.</p><button type="button" class="primary-button cleaning-done">Zurück zu den Pumpen</button></div></section>`;
         layer.querySelector('.cleaning-done').addEventListener('click', () => {
             layer.remove();
             state.activeTab = 'pumps';
@@ -1387,7 +1366,7 @@
     function openBackupRestoreDialog() {
         const layer = createSettingsDialog('backup-restore-dialog');
         const content = `<form class="backup-restore-form"><div class="backup-restore-warning"><span aria-hidden="true">!</span><p>Die Wiederherstellung ersetzt die aktuellen Daten und Bilder. Bitte wähle nur eine zuvor in CocktailOS erstellte ZIP-Sicherung aus.</p></div><label class="form-field full" for="backup-file"><span>Backup-Datei</span><input id="backup-file" name="file" type="file" accept="application/zip,.zip" required></label><div class="form-actions"><button type="button" class="secondary-button" data-dialog-close>Abbrechen</button><button type="submit" class="primary-button">Wiederherstellen</button></div></form>`;
-        setSettingsDialogContent(layer, 'Backup wiederherstellen', 'Die aktuellen Daten werden durch die Sicherung ersetzt.', content, { headingIcon: icons.refill });
+        setSettingsDialogContent(layer, 'Backup wiederherstellen', 'Die aktuellen Daten werden durch die Sicherung ersetzt.', content, { headingIcon: icons.backupRestore });
         layer.querySelector('form').addEventListener('submit', async event => {
             event.preventDefault();
             const file = event.currentTarget.elements.file.files[0];
@@ -1474,9 +1453,17 @@
             virtualKeyboardDrag = null;
             virtualKeyboard.classList.remove('is-dragging');
         });
+        virtualKeyboard.addEventListener('pointerup', event => {
+            const button = event.target.closest('[data-virtual-key]');
+            if (!button || !virtualKeyboardTarget || !isTouchKeyboardPointer(event)) return;
+            event.preventDefault();
+            virtualKeyboardSuppressClickUntil = performance.now() + 700;
+            applyVirtualKey(button.dataset.virtualKey);
+        });
         virtualKeyboard.addEventListener('click', event => {
             const button = event.target.closest('[data-virtual-key]');
             if (!button || !virtualKeyboardTarget) return;
+            if (performance.now() < virtualKeyboardSuppressClickUntil) return;
             applyVirtualKey(button.dataset.virtualKey);
         });
     }

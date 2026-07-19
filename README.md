@@ -18,11 +18,12 @@ CocktailOS Kiosk ist eine lokale Cocktail-Mixstation für Raspberry Pi und 7-Zol
 - Geführte Ersteinrichtung inklusive interaktiver Tour durch die komplette Oberfläche
 - Vierstelliger App-PIN für die Adminansicht; derselbe PIN schützt optional auch den Netzwerkzugriff
 - Lokale Datensicherung und Wiederherstellung als ZIP-Datei – auch ohne Internet
+- Einheitliche, lokal eingebundene Lucide-Icons – keine externen Icon-Downloads im Kiosk-Betrieb
 - Release-Updates direkt aus der Systemansicht oder über das Installationsskript
 
 ## Screenshots
 
-Jeder Screenshot zeigt links den Light Mode und rechts den Dark Mode.
+Jeder Screenshot zeigt die aktuelle Lucide-Iconografie: links den Light Mode, rechts den Dark Mode.
 
 | Cocktail auswählen | Größe wählen und starten |
 | --- | --- |
@@ -110,6 +111,24 @@ Weitere Optionen:
 3. In **Einstellungen** Cocktails, Zutaten, Pumpen und Größen einrichten.
 4. Für echte Hardware unter **System** von **Dummy** auf **Raspberry Pi GPIO** umstellen.
 5. Pumpen kalibrieren, Schläuche füllen und anschließend einen Cocktail auswählen.
+
+## App-PIN auf dem Pi ändern oder zurücksetzen
+
+Direkt am Raspberry Pi (per Terminal oder SSH) lässt sich der PIN ändern:
+
+```bash
+sudo cocktailos-change-pin
+```
+
+Der Befehl fragt den neuen vierstelligen PIN zweimal verdeckt ab, aktualisiert ihn in der lokalen Datenbank und startet CocktailOS wieder. Derselbe neue PIN gilt anschließend auch für den Netzwerkzugriff.
+
+Falls der PIN komplett gelöscht und anschließend in der UI neu vergeben werden soll:
+
+```bash
+sudo cocktailos-reset-pin
+```
+
+Nach der Bestätigung mit `LOESCHEN` startet CocktailOS neu und zeigt die PIN-Einrichtung. Der Netzwerkzugriff wird dabei zur Sicherheit deaktiviert; er kann nach dem neuen PIN wieder in **System** aktiviert werden.
 
 ## Datensicherung vom Pi holen
 

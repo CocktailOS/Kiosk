@@ -347,6 +347,162 @@ SUDOERS
 chmod 0440 "$UPDATE_SUDOERS_FILE"
 chown root:root "$UPDATE_SUDOERS_FILE"
 
+PIN_CHANGE_SCRIPT="/usr/local/sbin/cocktailos-change-pin"
+cat > "$PIN_CHANGE_SCRIPT" <<PIN_CHANGE_SCRIPT
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SERVICE_NAME="${SERVICE_NAME}"
+DATABASE="${SHARED_DATA_DIR}/cocktailos.db"
+ENV_FILE="${ENV_FILE}"
+
+if [[ "\${EUID}" -ne 0 ]]; then
+  echo "Bitte mit sudo ausführen: sudo cocktailos-change-pin" >&2
+  exit 1
+fi
+
+[[ -f "\${DATABASE}" ]] || { echo "CocktailOS-Datenbank nicht gefunden: \${DATABASE}" >&2; exit 1; }
+
+read -r -s -p "Neuen vierstelligen App-PIN eingeben: " pin
+echo
+read -r -s -p "App-PIN wiederholen: " confirmation
+echo
+
+[[ "\${pin}" =~ ^[0-9]{4}$ ]] || { echo "Der PIN muss aus genau vier Ziffern bestehen." >&2; exit 1; }
+[[ "\${pin}" == "\${confirmation}" ]] || { echo "Die PINs stimmen nicht überein." >&2; exit 1; }
+
+was_active=false
+if systemctl is-active --quiet "\${SERVICE_NAME}"; then
+  was_active=true
+  systemctl stop "\${SERVICE_NAME}"
+fi
+
+restart_service() {
+  if [[ "\${was_active}" == true ]]; then
+    systemctl start "\${SERVICE_NAME}"
+  fi
+}
+trap restart_service EXIT
+
+PIN="\${pin}" DATABASE="\${DATABASE}" ENV_FILE="\${ENV_FILE}" python3 - <<'PY'
+import base64
+import hashlib
+import os
+import sqlite3
+
+pin = os.environ["PIN"].encode("ascii")
+salt = os.urandom(16)
+digest = hashlib.pbkdf2_hmac("sha256", pin, salt, 120_000, 32)
+pin_hash = f"v1.120000.{base64.b64encode(salt).decode()}.{base64.b64encode(digest).decode()}"
+
+database = os.environ["DATABASE"]
+with sqlite3.connect(database) as connection:
+    cursor = connection.execute(
+        "UPDATE MachineConfigurations SET NetworkAccessPinHash = ? WHERE Id = 1", (pin_hash,))
+    if cursor.rowcount != 1:
+        raise SystemExit("Die CocktailOS-Konfiguration konnte nicht gefunden werden.")
+
+env_file = os.environ["ENV_FILE"]
+lines = []
+if os.path.exists(env_file):
+    with open(env_file, encoding="utf-8") as handle:
+        lines = [line.rstrip("\\n") for line in handle]
+
+key = "COCKTAILOS_NETWORK_ACCESS_PIN_HASH="
+updated = False
+for index, line in enumerate(lines):
+    if line.startswith(key):
+        lines[index] = key + pin_hash
+        updated = True
+        break
+if not updated:
+    lines.append(key + pin_hash)
+
+temporary = env_file + ".tmp"
+with open(temporary, "w", encoding="utf-8") as handle:
+    handle.write("\\n".join(lines) + "\\n")
+os.chmod(temporary, 0o644)
+os.replace(temporary, env_file)
+PY
+
+echo "App-PIN wurde geändert. Der neue PIN gilt auch für den Netzwerkzugriff."
+PIN_CHANGE_SCRIPT
+chmod 0755 "$PIN_CHANGE_SCRIPT"
+chown root:root "$PIN_CHANGE_SCRIPT"
+
+PIN_RESET_SCRIPT="/usr/local/sbin/cocktailos-reset-pin"
+cat > "$PIN_RESET_SCRIPT" <<PIN_RESET_SCRIPT
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SERVICE_NAME="${SERVICE_NAME}"
+DATABASE="${SHARED_DATA_DIR}/cocktailos.db"
+ENV_FILE="${ENV_FILE}"
+
+if [[ "\${EUID}" -ne 0 ]]; then
+  echo "Bitte mit sudo ausführen: sudo cocktailos-reset-pin" >&2
+  exit 1
+fi
+
+[[ -f "\${DATABASE}" ]] || { echo "CocktailOS-Datenbank nicht gefunden: \${DATABASE}" >&2; exit 1; }
+read -r -p "PIN wirklich löschen? Zum Bestätigen LOESCHEN eingeben: " confirmation
+[[ "\${confirmation}" == "LOESCHEN" ]] || { echo "Abgebrochen."; exit 0; }
+
+was_active=false
+if systemctl is-active --quiet "\${SERVICE_NAME}"; then
+  was_active=true
+  systemctl stop "\${SERVICE_NAME}"
+fi
+
+restart_service() {
+  if [[ "\${was_active}" == true ]]; then
+    systemctl start "\${SERVICE_NAME}"
+  fi
+}
+trap restart_service EXIT
+
+DATABASE="\${DATABASE}" ENV_FILE="\${ENV_FILE}" python3 - <<'PY'
+import os
+import sqlite3
+
+database = os.environ["DATABASE"]
+with sqlite3.connect(database) as connection:
+    cursor = connection.execute(
+        "UPDATE MachineConfigurations SET NetworkAccessPinHash = NULL, NetworkAccessEnabled = 0 WHERE Id = 1")
+    if cursor.rowcount != 1:
+        raise SystemExit("Die CocktailOS-Konfiguration konnte nicht gefunden werden.")
+
+env_file = os.environ["ENV_FILE"]
+lines = []
+if os.path.exists(env_file):
+    with open(env_file, encoding="utf-8") as handle:
+        lines = [line.rstrip("\\n") for line in handle]
+
+updates = {
+    "COCKTAILOS_NETWORK_ACCESS_PIN_HASH=": "COCKTAILOS_NETWORK_ACCESS_PIN_HASH=",
+    "COCKTAILOS_NETWORK_ACCESS_DEFAULT=": "COCKTAILOS_NETWORK_ACCESS_DEFAULT=false",
+}
+for key, value in updates.items():
+    for index, line in enumerate(lines):
+        if line.startswith(key):
+            lines[index] = value
+            break
+    else:
+        lines.append(value)
+
+temporary = env_file + ".tmp"
+with open(temporary, "w", encoding="utf-8") as handle:
+    handle.write("\\n".join(lines) + "\\n")
+os.chmod(temporary, 0o644)
+os.replace(temporary, env_file)
+PY
+
+echo "App-PIN wurde gelöscht. Vergib ihn jetzt direkt in der CocktailOS-Oberfläche neu."
+echo "Der Netzwerkzugriff wurde zur Sicherheit deaktiviert und kann danach in den Einstellungen wieder aktiviert werden."
+PIN_RESET_SCRIPT
+chmod 0755 "$PIN_RESET_SCRIPT"
+chown root:root "$PIN_RESET_SCRIPT"
+
 KIOSK_SERVICE_NAME="${SERVICE_NAME}-cage"
 KIOSK_SERVICE_FILE="/etc/systemd/system/${KIOSK_SERVICE_NAME}.service"
 KIOSK_SCRIPT="/usr/local/lib/cocktailos-kiosk/cage-session"
