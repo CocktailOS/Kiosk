@@ -1,27 +1,29 @@
+using CocktailOS.Kiosk.Data;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using System.IO.Compression;
 
 namespace CocktailOS.Kiosk.Services;
 
-public sealed class BackupService(IWebHostEnvironment environment)
+public sealed class BackupService(IWebHostEnvironment environment, IServiceScopeFactory scopeFactory)
 {
     private const string DatabaseFileName = "cocktailos.db";
     private const long MaximumArchiveBytes = 100 * 1024 * 1024;
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
 
-    private string DataDirectory => Path.Combine(environment.ContentRootPath, "data");
-    private string DatabasePath => Path.Combine(DataDirectory, DatabaseFileName);
     private string UploadDirectory => Path.Combine(environment.WebRootPath, "uploads");
 
     public async Task<(Stream Stream, string FileName)> CreateAsync(CancellationToken ct)
     {
         var stream = new MemoryStream();
-        var snapshotDirectory = Path.Combine(DataDirectory, $".backup-{Guid.NewGuid():N}");
+        var databasePath = await GetDatabasePathAsync(ct);
+        var dataDirectory = Path.GetDirectoryName(databasePath)!;
+        var snapshotDirectory = Path.Combine(dataDirectory, $".backup-{Guid.NewGuid():N}");
         Directory.CreateDirectory(snapshotDirectory);
         try
         {
             var snapshotPath = Path.Combine(snapshotDirectory, DatabaseFileName);
-            await CreateDatabaseSnapshotAsync(snapshotPath, ct);
+            await CreateDatabaseSnapshotAsync(databasePath, snapshotPath, ct);
             SqliteConnection.ClearAllPools();
             using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
             {
@@ -45,7 +47,9 @@ public sealed class BackupService(IWebHostEnvironment environment)
         if (archiveFile.Length is <= 0 or > MaximumArchiveBytes || !Path.GetExtension(archiveFile.FileName).Equals(".zip", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Wähle eine gültige CocktailOS-Backupdatei im ZIP-Format bis 100 MB.");
 
-        var staging = Path.Combine(DataDirectory, $".restore-{Guid.NewGuid():N}");
+        var databasePath = await GetDatabasePathAsync(ct);
+        var dataDirectory = Path.GetDirectoryName(databasePath)!;
+        var staging = Path.Combine(dataDirectory, $".restore-{Guid.NewGuid():N}");
         Directory.CreateDirectory(staging);
         try
         {
@@ -73,12 +77,12 @@ public sealed class BackupService(IWebHostEnvironment environment)
 
             await ValidateDatabaseAsync(Path.Combine(staging, DatabaseFileName), ct);
             SqliteConnection.ClearAllPools();
-            var safetyCopy = Path.Combine(DataDirectory, $"cocktailos-before-restore-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.db");
-            File.Copy(DatabasePath, safetyCopy, overwrite: false);
-            File.Copy(Path.Combine(staging, DatabaseFileName), DatabasePath, overwrite: true);
+            var safetyCopy = Path.Combine(dataDirectory, $"cocktailos-before-restore-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.db");
+            File.Copy(databasePath, safetyCopy, overwrite: false);
+            File.Copy(Path.Combine(staging, DatabaseFileName), databasePath, overwrite: true);
 
             var stagedUploads = Path.Combine(staging, "uploads");
-            var previousUploads = Path.Combine(DataDirectory, $"uploads-before-restore-{DateTimeOffset.Now:yyyyMMdd-HHmmss}");
+            var previousUploads = Path.Combine(dataDirectory, $"uploads-before-restore-{DateTimeOffset.Now:yyyyMMdd-HHmmss}");
             if (Directory.Exists(UploadDirectory)) Directory.Move(UploadDirectory, previousUploads);
             if (Directory.Exists(stagedUploads)) Directory.Move(stagedUploads, UploadDirectory); else Directory.CreateDirectory(UploadDirectory);
         }
@@ -103,15 +107,26 @@ public sealed class BackupService(IWebHostEnvironment environment)
         catch (IOException) { }
     }
 
-    private async Task CreateDatabaseSnapshotAsync(string snapshotPath, CancellationToken ct)
+    private async Task CreateDatabaseSnapshotAsync(string databasePath, string snapshotPath, CancellationToken ct)
     {
-        var sourceConnectionString = new SqliteConnectionStringBuilder { DataSource = DatabasePath, Mode = SqliteOpenMode.ReadWrite }.ToString();
+        var sourceConnectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite }.ToString();
         var targetConnectionString = new SqliteConnectionStringBuilder { DataSource = snapshotPath, Mode = SqliteOpenMode.ReadWriteCreate }.ToString();
         await using var source = new SqliteConnection(sourceConnectionString);
         await using var target = new SqliteConnection(targetConnectionString);
         await source.OpenAsync(ct);
         await target.OpenAsync(ct);
         source.BackupDatabase(target);
+    }
+
+    private async Task<string> GetDatabasePathAsync(CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Database.OpenConnectionAsync(ct);
+        var path = db.Database.GetDbConnection().DataSource;
+        await db.Database.CloseConnectionAsync();
+        if (string.IsNullOrWhiteSpace(path)) throw new InvalidOperationException("Der Datenbankpfad konnte nicht ermittelt werden.");
+        return Path.GetFullPath(path);
     }
 
     private static async Task ValidateDatabaseAsync(string path, CancellationToken ct)
