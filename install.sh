@@ -355,6 +355,14 @@ LEGACY_DISPLAY_SERVICE_FILE="/etc/systemd/system/${LEGACY_DISPLAY_SERVICE_NAME}.
 if [[ "$MODE" == "display" ]]; then
   install -d -m 0755 /usr/local/lib/cocktailos-kiosk
   install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "${DATA_ROOT}/runtime" "${DATA_ROOT}/browser"
+  install -d -m 0755 /etc/chromium/policies/managed
+  cat > /etc/chromium/policies/managed/cocktailos-kiosk.json <<'CHROMIUM_POLICY'
+{
+  "TranslateEnabled": false
+}
+CHROMIUM_POLICY
+  chmod 0644 /etc/chromium/policies/managed/cocktailos-kiosk.json
+  chown root:root /etc/chromium/policies/managed/cocktailos-kiosk.json
   if [[ -f /etc/X11/Xwrapper.config ]] && grep -q 'Managed by CocktailOS Kiosk install.sh.' /etc/X11/Xwrapper.config; then
     rm -f /etc/X11/Xwrapper.config
   fi
@@ -367,6 +375,17 @@ export XDG_CACHE_HOME="\${HOME}/.cache"
 export XDG_RUNTIME_DIR="${DATA_ROOT}/runtime"
 mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}" "\${XDG_RUNTIME_DIR}"
 chmod 0700 "\${XDG_RUNTIME_DIR}"
+mkdir -p "\${HOME}/kiosk-profile/Default"
+cat > "\${HOME}/kiosk-profile/Default/Preferences" <<'PREFERENCES'
+{
+  "translate": {
+    "enabled": false
+  },
+  "intl": {
+    "accept_languages": "de-DE,de"
+  }
+}
+PREFERENCES
 
 if command -v chromium >/dev/null 2>&1; then
   chromium_bin="\$(command -v chromium)"
@@ -383,6 +402,7 @@ args=(
   --no-default-browser-check
   --disable-session-crashed-bubble
   --disable-infobars
+  --user-data-dir="\${HOME}/kiosk-profile"
   --password-store=basic
   --ozone-platform=wayland
   --enable-features=UseOzonePlatform
