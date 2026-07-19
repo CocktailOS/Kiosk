@@ -598,7 +598,7 @@
         document.querySelector('.modal-layer')?.remove();
         const layer = document.createElement('div');
         layer.className = 'modal-layer';
-        layer.innerHTML = `<div class="modal-scrim"></div><section class="dispense-panel" role="dialog" aria-modal="true" aria-labelledby="dispense-title"><div class="glass-stage"><div class="glass" aria-hidden="true"><div class="liquid"><i class="bubble one"></i><i class="bubble two"></i><i class="bubble three"></i></div></div></div><div class="dispense-copy"><span class="eyebrow">Wird gemixt</span><h2 id="dispense-title">${escapeHtml(status.cocktailName || 'Dein Cocktail')}</h2><p>${escapeHtml(status.sizeName || '')} · ${status.steps.length} Pumpen arbeiten parallel</p><div class="progress-track"><div class="progress-bar"></div></div><div class="progress-row"><span class="progress-label">0 %</span><span class="time-label">Noch einen Moment</span></div><button class="danger-button wide-button stop-dispense">${icons.stop} Sofort stoppen</button><p class="stop-hint">Stop schaltet alle Pumpen unmittelbar aus.</p></div></section>`;
+        layer.innerHTML = `<div class="modal-scrim"></div><section class="dispense-panel" role="dialog" aria-modal="true" aria-labelledby="dispense-title"><div class="glass-stage"><div class="glass-wrap"><div class="glass" aria-hidden="true"><div class="liquid"><i class="bubble one"></i><i class="bubble two"></i><i class="bubble three"></i></div></div><div class="glass-status" aria-live="polite"><strong class="glass-poured">0 ml</strong></div></div></div><div class="dispense-copy"><h2 id="dispense-title">${escapeHtml(status.cocktailName || 'Dein Cocktail')}</h2><div class="dispense-overview"><div class="dispense-countdown" aria-live="polite"><span>Restzeit</span><strong class="time-label">0:00</strong></div><div class="dispense-progress"><div class="progress-row"><span>Fortschritt</span><strong class="progress-label">0 %</strong></div><div class="progress-track"><div class="progress-bar"></div></div></div></div><section class="active-pumps" aria-live="polite"><div class="active-pumps-heading"><span>Pumpen</span></div><div class="active-pump-list"></div></section><button class="danger-button wide-button stop-dispense">${icons.stop} Sofort stoppen</button><p class="stop-hint">Stop schaltet alle Pumpen unmittelbar aus.</p></div></section>`;
         app.append(layer);
         layer.querySelector('.stop-dispense').addEventListener('click', stopDispense);
         updateDispenseUi(status);
@@ -640,10 +640,36 @@
             if (bar) bar.style.width = `${progress * 100}%`;
         }
         const percent = document.querySelector('.progress-label');
-        const remaining = Math.max(0, status.estimatedDurationSeconds * (1 - status.progress));
+        const remaining = Math.max(0, (status.estimatedDurationSeconds || 0) * (1 - (status.progress || 0)));
         if (percent) percent.textContent = `${Math.round(status.progress * 100)} %`;
         const time = document.querySelector('.time-label');
-        if (time) time.textContent = remaining > 1 ? `ca. ${Math.ceil(remaining)} Sek.` : 'Gleich fertig';
+        if (time) time.textContent = formatDispenseTime(remaining);
+        const totalAmount = (status.steps || []).reduce((total, step) => total + Number(step.amountMl || 0), 0);
+        const poured = document.querySelector('.glass-poured');
+        if (poured) poured.textContent = `${formatWholeMl(totalAmount * (status.progress || 0))} ml`;
+        updateActivePumps(status);
+    }
+
+    function updateActivePumps(status) {
+        const list = document.querySelector('.active-pump-list');
+        if (!list) return;
+
+        const elapsed = Math.max(0, (status.progress || 0) * (status.estimatedDurationSeconds || 0));
+        const steps = status.steps || [];
+        list.innerHTML = steps.map(step => {
+            const isRunning = elapsed < Math.max(0, step.durationSeconds || 0) - .05;
+            return `<div class="active-pump ${isRunning ? 'is-running' : 'is-idle'}"><span class="active-pump-dot" aria-hidden="true"></span><span class="active-pump-name">${escapeHtml(step.ingredientName || `Pumpe ${step.pumpId}`)}</span><span class="active-pump-meta">Pumpe ${Number(step.pumpId)} · ${formatWholeMl(step.amountMl || 0)} ml</span></div>`;
+        }).join('');
+    }
+
+    function formatDispenseTime(seconds) {
+        const totalSeconds = Math.max(0, Math.ceil(seconds || 0));
+        const minutes = Math.floor(totalSeconds / 60);
+        return `${minutes}:${String(totalSeconds % 60).padStart(2, '0')}`;
+    }
+
+    function formatWholeMl(value) {
+        return new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 }).format(Math.round(value || 0));
     }
 
     async function stopDispense(event) {
@@ -664,18 +690,30 @@
         clearInterval(state.pollTimer);
         const layer = document.querySelector('.modal-layer');
         if (!layer || layer.querySelector('.success-state')) return;
-        layer.innerHTML = `<div class="modal-scrim"></div><section class="success-state" role="status"><div>${icons.check}<h2>Fertig gemixt</h2><p>${escapeHtml(status.cocktailName || 'Dein Cocktail')} ist bereit. Prost!</p></div></section>`;
-        if (window.gsap && !reduceMotion) {
-            gsap.set('.check-circle', { strokeDasharray: 320, strokeDashoffset: 320 });
-            gsap.timeline()
-                .from('.success-state', { opacity: 0, scale: .96, duration: .24 })
-                .to('.check-circle', { strokeDashoffset: 0, duration: .42, ease: 'power2.out' })
-                .from('.check-path', { opacity: 0, scale: .35, transformOrigin: '50% 50%', duration: .28, ease: 'back.out(2)' }, '-=.2');
-        }
+        layer.innerHTML = `<div class="modal-scrim"></div><section class="success-state" role="status"><div>${successCheckIcon()}<h2>Fertig gemixt</h2><p>${escapeHtml(status.cocktailName || 'Dein Cocktail')} ist bereit. Prost!</p></div></section>`;
+        animateSuccessCheck(layer);
         state.completionTimer = setTimeout(async () => {
             layer.remove();
             await reloadDataAndRender();
         }, 5000);
+    }
+
+    function animateSuccessCheck(layer) {
+        if (!window.gsap || reduceMotion) return;
+        const success = layer.querySelector('.success-state');
+        const circle = success?.querySelector('svg circle');
+        const path = success?.querySelector('svg path');
+        if (!success || !circle || !path) return;
+
+        gsap.set(circle, { strokeDasharray: 320, strokeDashoffset: 320 });
+        gsap.timeline()
+            .from(success, { opacity: 0, scale: .96, duration: .24 })
+            .to(circle, { strokeDashoffset: 0, duration: .42, ease: 'power2.out' })
+            .from(path, { opacity: 0, scale: .35, transformOrigin: '50% 50%', duration: .28, ease: 'back.out(2)' }, '-=.2');
+    }
+
+    function successCheckIcon() {
+        return '<svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="8" aria-hidden="true"><circle class="check-circle" cx="60" cy="60" r="48"/><path class="check-path" d="m36 61 16 16 34-38"/></svg>';
     }
 
     async function finishStopped(mode) {
@@ -1291,7 +1329,8 @@
         clearInterval(state.pollTimer);
         const layer = document.querySelector('.modal-layer');
         if (!layer || layer.querySelector('.success-state')) return;
-        layer.innerHTML = `<div class="modal-scrim"></div><section class="success-state cleaning-success" role="status"><div>${icons.check}<h2>Reinigung abgeschlossen</h2><p>Alle ausgewählten Pumpen sind gespült und ausgeschaltet.</p><button type="button" class="primary-button cleaning-done">Zurück zu den Pumpen</button></div></section>`;
+        layer.innerHTML = `<div class="modal-scrim"></div><section class="success-state cleaning-success" role="status"><div>${successCheckIcon()}<h2>Reinigung abgeschlossen</h2><p>Alle ausgewählten Pumpen sind gespült und ausgeschaltet.</p><button type="button" class="primary-button cleaning-done">Zurück zu den Pumpen</button></div></section>`;
+        animateSuccessCheck(layer);
         layer.querySelector('.cleaning-done').addEventListener('click', () => {
             layer.remove();
             state.activeTab = 'pumps';

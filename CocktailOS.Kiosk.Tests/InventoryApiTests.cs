@@ -83,6 +83,7 @@ public sealed class InventoryApiTests
     {
         using var factory = new KioskApplicationFactory();
         using var client = factory.CreateClient();
+        await factory.UseGpioDriverAsync();
         await factory.SetAllPumpFlowRatesAsync(10_000m);
         var cocktails = await client.GetFromJsonAsync<CocktailResponse[]>("/api/cocktails");
         var cubaLibre = cocktails!.Single(x => x.Name == "Cuba Libre");
@@ -99,10 +100,31 @@ public sealed class InventoryApiTests
     }
 
     [Fact]
+    public async Task CompletedDummyDispense_DoesNotDeductInventory()
+    {
+        using var factory = new KioskApplicationFactory();
+        using var client = factory.CreateClient();
+        await factory.SetAllPumpFlowRatesAsync(10_000m);
+        var cocktails = await client.GetFromJsonAsync<CocktailResponse[]>("/api/cocktails");
+        var cubaLibre = cocktails!.Single(x => x.Name == "Cuba Libre");
+        var before = await factory.GetIngredientAsync("Cola");
+
+        var start = await client.PostAsJsonAsync(
+            "/api/dispenses",
+            new StartDispenseRequest(cubaLibre.Id, cubaLibre.StandardSize.Id));
+        start.EnsureSuccessStatusCode();
+        await WaitForStatusAsync(client, DispenseStatuses.Completed, TimeSpan.FromSeconds(2));
+        var after = await factory.GetIngredientAsync("Cola");
+
+        Assert.Equal(before.RemainingVolumeMl, after.RemainingVolumeMl);
+    }
+
+    [Fact]
     public async Task StoppedDispense_DeductsOnlyActualPumpRuntime()
     {
         using var factory = new KioskApplicationFactory();
         using var client = factory.CreateClient();
+        await factory.UseGpioDriverAsync();
         await factory.SetAllPumpFlowRatesAsync(10m);
         var cocktails = await client.GetFromJsonAsync<CocktailResponse[]>("/api/cocktails");
         var cubaLibre = cocktails!.Single(x => x.Name == "Cuba Libre");

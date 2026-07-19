@@ -178,7 +178,7 @@ public sealed class DispenseService(
                 finalError = "NOT-AUS fehlgeschlagen. Stromversorgung der Pumpen sofort trennen.";
             }
 
-            if (plan.Mode == PumpOperationModes.Dispense)
+            if (plan.Mode == PumpOperationModes.Dispense && !UsesDummyPumpDriver(plan.Hardware))
             {
                 try
                 {
@@ -272,6 +272,9 @@ public sealed class DispenseService(
 
         await db.SaveChangesAsync();
     }
+
+    private static bool UsesDummyPumpDriver(HardwareSettings hardware) =>
+        hardware.PumpDriver.Equals(PumpDriverNames.Dummy, StringComparison.OrdinalIgnoreCase);
 
     private static async Task<DispensePlan> CreatePlanAsync(
         AppDbContext db,
