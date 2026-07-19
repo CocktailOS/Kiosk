@@ -128,7 +128,7 @@ Falls der PIN komplett gelöscht und anschließend in der UI neu vergeben werden
 sudo cocktailos-reset-pin
 ```
 
-Nach der Bestätigung mit `LOESCHEN` startet CocktailOS neu und zeigt die PIN-Einrichtung. Der Netzwerkzugriff wird dabei zur Sicherheit deaktiviert; er kann nach dem neuen PIN wieder in **System** aktiviert werden.
+Nach der Bestätigung mit `LOESCHEN` startet CocktailOS inklusive der Kiosk-Ansicht neu und zeigt unmittelbar die PIN-Einrichtung. Der Netzwerkzugriff wird dabei zur Sicherheit deaktiviert; er kann nach dem neuen PIN wieder in **System** aktiviert werden.
 
 ## Datensicherung vom Pi holen
 

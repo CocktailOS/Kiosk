@@ -353,6 +353,7 @@ cat > "$PIN_CHANGE_SCRIPT" <<PIN_CHANGE_SCRIPT
 set -Eeuo pipefail
 
 SERVICE_NAME="${SERVICE_NAME}"
+KIOSK_SERVICE_NAME="${SERVICE_NAME}-cage"
 DATABASE="${SHARED_DATA_DIR}/cocktailos.db"
 ENV_FILE="${ENV_FILE}"
 
@@ -371,6 +372,11 @@ echo
 [[ "\${pin}" =~ ^[0-9]{4}$ ]] || { echo "Der PIN muss aus genau vier Ziffern bestehen." >&2; exit 1; }
 [[ "\${pin}" == "\${confirmation}" ]] || { echo "Die PINs stimmen nicht überein." >&2; exit 1; }
 
+kiosk_was_active=false
+if systemctl is-active --quiet "\${KIOSK_SERVICE_NAME}"; then
+  kiosk_was_active=true
+  systemctl stop "\${KIOSK_SERVICE_NAME}"
+fi
 was_active=false
 if systemctl is-active --quiet "\${SERVICE_NAME}"; then
   was_active=true
@@ -380,6 +386,9 @@ fi
 restart_service() {
   if [[ "\${was_active}" == true ]]; then
     systemctl start "\${SERVICE_NAME}"
+  fi
+  if [[ "\${kiosk_was_active}" == true ]]; then
+    systemctl start "\${KIOSK_SERVICE_NAME}"
   fi
 }
 trap restart_service EXIT
@@ -436,6 +445,7 @@ cat > "$PIN_RESET_SCRIPT" <<PIN_RESET_SCRIPT
 set -Eeuo pipefail
 
 SERVICE_NAME="${SERVICE_NAME}"
+KIOSK_SERVICE_NAME="${SERVICE_NAME}-cage"
 DATABASE="${SHARED_DATA_DIR}/cocktailos.db"
 ENV_FILE="${ENV_FILE}"
 
@@ -448,6 +458,11 @@ fi
 read -r -p "PIN wirklich löschen? Zum Bestätigen LOESCHEN eingeben: " confirmation
 [[ "\${confirmation}" == "LOESCHEN" ]] || { echo "Abgebrochen."; exit 0; }
 
+kiosk_was_active=false
+if systemctl is-active --quiet "\${KIOSK_SERVICE_NAME}"; then
+  kiosk_was_active=true
+  systemctl stop "\${KIOSK_SERVICE_NAME}"
+fi
 was_active=false
 if systemctl is-active --quiet "\${SERVICE_NAME}"; then
   was_active=true
@@ -457,6 +472,9 @@ fi
 restart_service() {
   if [[ "\${was_active}" == true ]]; then
     systemctl start "\${SERVICE_NAME}"
+  fi
+  if [[ "\${kiosk_was_active}" == true ]]; then
+    systemctl start "\${KIOSK_SERVICE_NAME}"
   fi
 }
 trap restart_service EXIT
@@ -468,7 +486,7 @@ import sqlite3
 database = os.environ["DATABASE"]
 with sqlite3.connect(database) as connection:
     cursor = connection.execute(
-        "UPDATE MachineConfigurations SET NetworkAccessPinHash = NULL, NetworkAccessEnabled = 0 WHERE Id = 1")
+        "UPDATE MachineConfigurations SET NetworkAccessPinHash = NULL, NetworkAccessEnabled = 0, IntroTourCompleted = 1 WHERE Id = 1")
     if cursor.rowcount != 1:
         raise SystemExit("Die CocktailOS-Konfiguration konnte nicht gefunden werden.")
 
