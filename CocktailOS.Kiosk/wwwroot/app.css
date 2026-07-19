@@ -1388,6 +1388,86 @@ button, .primary-button, .secondary-button, .danger-button, .tab-button { white-
     .settings-nav { width: 100%; }
 }
 
+/* Alcohol strength: a quick, readable scale on cards and in the recipe dialog. */
+.alcohol-strength-pill { display: inline-flex; align-items: center; gap: 5px; }
+.alcohol-strength-mini { display: inline-flex; align-items: end; gap: 2px; height: 10px; }
+.alcohol-strength-mini span,
+.alcohol-strength-scale span { display: block; width: 4px; border-radius: 999px; background: rgba(255,255,255,.28); }
+.alcohol-strength-mini span:nth-child(1), .alcohol-strength-scale span:nth-child(1) { height: 4px; }
+.alcohol-strength-mini span:nth-child(2), .alcohol-strength-scale span:nth-child(2) { height: 6px; }
+.alcohol-strength-mini span:nth-child(3), .alcohol-strength-scale span:nth-child(3) { height: 8px; }
+.alcohol-strength-mini span:nth-child(4), .alcohol-strength-scale span:nth-child(4) { height: 10px; }
+.alcohol-strength-mini span.is-active,
+.alcohol-strength-scale span.is-active { background: var(--accent); }
+.alcohol-strength {
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-soft);
+}
+.alcohol-strength > div { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+.alcohol-strength > div span { color: var(--text-muted); font-size: 13px; font-weight: 700; }
+.alcohol-strength > div strong { color: var(--text); font-size: 13px; }
+.alcohol-strength-scale { display: grid; grid-template-columns: repeat(4, 1fr); align-items: end; gap: 5px; height: 12px; }
+.alcohol-strength-scale span { width: 100%; }
+html[data-theme="light"] .alcohol-strength { background: var(--surface-soft); }
+html[data-theme="light"] .alcohol-strength-mini span,
+html[data-theme="light"] .alcohol-strength-scale span { background: #cbd4e2; }
+html[data-theme="light"] .alcohol-strength-mini span.is-active,
+html[data-theme="light"] .alcohol-strength-scale span.is-active { background: #b87910; }
+
+/* Recipe ingredient breakdown: one composition bar and a compact colour key. */
+.ingredient-composition { margin: 0 0 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); }
+.ingredient-composition-heading { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: var(--text-muted); font-size: 13px; font-weight: 700; }
+.ingredient-composition-heading strong { color: var(--text); font-weight: 700; }
+.ingredient-composition-bar { display: flex; height: 10px; overflow: hidden; border-radius: 999px; background: var(--surface-strong); }
+.ingredient-composition-bar > span { flex: 0 0 var(--ingredient-share); min-width: 2px; background: var(--ingredient-color); }
+.ingredient-list .ingredient-breakdown-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 9px 0; }
+.ingredient-breakdown-swatch { width: 9px; height: 9px; border-radius: 50%; background: var(--ingredient-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ingredient-color) 18%, transparent); }
+.ingredient-breakdown-row strong { overflow: hidden; color: var(--text); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.ingredient-breakdown-row > span:last-child { color: var(--text-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+html[data-theme="light"] .ingredient-composition { background: var(--surface-soft); }
+html[data-theme="light"] .ingredient-composition-bar { background: #dbe2ee; }
+
+/* Serving size cards: clear hierarchy and a touch-friendly selected state. */
+.size-selector {
+    gap: 3px;
+    margin-bottom: 18px;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-strong);
+}
+.size-option {
+    min-height: 56px;
+    display: grid;
+    place-items: center;
+    gap: 1px;
+    padding: 8px 10px;
+    border-color: transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    text-align: center;
+}
+.size-option:hover:not(:disabled) { border-color: transparent; background: rgba(124,58,237,.12); }
+.size-option strong { font-size: 14px; }
+.size-option-volume { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.size-option[aria-pressed="true"] {
+    border-color: transparent;
+    background: var(--primary);
+    color: #fff;
+    box-shadow: none;
+}
+.size-option[aria-pressed="true"] .size-option-volume { color: rgba(255,255,255,.8); }
+.size-option:disabled { background: transparent; }
+html[data-theme="light"] .size-selector { background: #edf1f8; }
+html[data-theme="light"] .size-option { background: transparent; }
+html[data-theme="light"] .size-option:hover:not(:disabled) { background: rgba(124,58,237,.1); }
+html[data-theme="light"] .size-option[aria-pressed="true"] { background: #6d28d9; color: #fff; }
+html[data-theme="light"] .size-option[aria-pressed="true"] .size-option-volume { color: rgba(255,255,255,.82); }
+
 @media (max-width: 620px) {
     .topbar { padding-inline: var(--hall-space-3); }
     .home-main { height: auto; min-height: calc(100dvh - var(--header-height)); padding: var(--hall-space-3); }
@@ -1732,4 +1812,28 @@ button, .primary-button, .secondary-button, .danger-button, .tab-button { white-
 
 @media (max-width: 759px) {
     .virtual-keyboard.is-pin-keyboard { width: calc(100vw - 32px); }
+}
+
+/* 1024 × 600 kiosk: retain touch scrolling, but never show browser or panel scrollbars. */
+@media (min-width: 801px) and (max-height: 650px) {
+    html, body { height: 100dvh; overflow: hidden; }
+    .cocktail-scroller,
+    .settings-card,
+    .settings-workbench .list-card,
+    .system-hero,
+    .settings-dialog-body,
+    .cocktail-modal {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+    .cocktail-scroller::-webkit-scrollbar,
+    .settings-card::-webkit-scrollbar,
+    .settings-workbench .list-card::-webkit-scrollbar,
+    .system-hero::-webkit-scrollbar,
+    .settings-dialog-body::-webkit-scrollbar,
+    .cocktail-modal::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+    }
 }

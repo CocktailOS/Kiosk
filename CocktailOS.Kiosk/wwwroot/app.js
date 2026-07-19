@@ -463,6 +463,23 @@
         return hasAvailableSize ? { ...standard, status: 'limited' } : standard;
     }
 
+    function alcoholStrength(cocktail) {
+        const percentage = Math.max(0, Number(cocktail.alcoholPercentage) || 0);
+        if (percentage === 0) return { percentage, level: 0, label: 'Alkoholfrei' };
+        if (percentage <= 5) return { percentage, level: 1, label: 'Leicht' };
+        if (percentage <= 12) return { percentage, level: 2, label: 'Mittel' };
+        if (percentage <= 20) return { percentage, level: 3, label: 'Stark' };
+        return { percentage, level: 4, label: 'Sehr stark' };
+    }
+
+    function alcoholScaleMarkup(cocktail, compact = false) {
+        const strength = alcoholStrength(cocktail);
+        const segments = [1, 2, 3, 4].map(level => `<span class="${level <= strength.level ? 'is-active' : ''}"></span>`).join('');
+        const detail = strength.level === 0 ? strength.label : `${strength.label} · ${formatNumber(strength.percentage)} % Vol.`;
+        if (compact) return `<span class="meta-pill alcohol-strength-pill" title="Alkoholstärke: ${escapeHtml(detail)}"><span class="alcohol-strength-mini" aria-hidden="true">${segments}</span>${escapeHtml(detail)}</span>`;
+        return `<section class="alcohol-strength" aria-label="Alkoholstärke: ${escapeHtml(detail)}"><div><span>Alkoholstärke</span><strong>${escapeHtml(detail)}</strong></div><span class="alcohol-strength-scale" aria-hidden="true">${segments}</span></section>`;
+    }
+
     function renderHome() {
         const pages = [];
         for (let index = 0; index < state.cocktails.length; index += 5) {
@@ -478,7 +495,7 @@
                 return `<button class="cocktail-card ${cardIndex === 0 ? 'cocktail-card-featured' : ''} ${availability.status === 'unavailable' ? 'is-unavailable' : ''}" data-cocktail-id="${cocktail.id}" aria-label="${escapeHtml(cocktail.name)} auswählen${availability.status === 'unavailable' ? ', derzeit nicht verfügbar' : ''}">
                 <span class="card-media"><img class="card-image" src="${safeImage(cocktail.imagePath)}" alt="" width="400" height="520" loading="${index + cardIndex < 3 ? 'eager' : 'lazy'}" decoding="async"></span>
                 <span class="card-shade" aria-hidden="true"></span>
-                <span class="card-content"><span class="card-meta"><span class="meta-pill">${cocktail.standardSize.volumeMl} ml</span>${cocktail.alcoholPercentage > 0 ? `<span class="meta-pill">${formatNumber(cocktail.alcoholPercentage)} % Vol.</span>` : '<span class="meta-pill">Alkoholfrei</span>'}${stockPill}</span><h2>${escapeHtml(cocktail.name)}</h2><p>${escapeHtml(cocktail.description || ingredientSummary(cocktail))}</p></span>
+                <span class="card-content"><span class="card-meta"><span class="meta-pill">${cocktail.standardSize.volumeMl} ml</span>${alcoholScaleMarkup(cocktail, true)}${stockPill}</span><h2>${escapeHtml(cocktail.name)}</h2><p>${escapeHtml(cocktail.description || ingredientSummary(cocktail))}</p></span>
             </button>`;
             }).join('');
             pages.push(`<section class="cocktail-page" aria-label="Cocktailseite ${pages.length + 1}">${cards}</section>`);
@@ -522,12 +539,20 @@
         const cocktail = state.selectedCocktail;
         const size = state.sizes.find(x => x.id === state.selectedSizeId) || cocktail.standardSize;
         const scale = size.volumeMl / cocktail.standardSize.volumeMl;
-        const ingredients = cocktail.ingredients.map(item => `<li><span>${escapeHtml(item.name)}</span><span>${formatNumber(item.amountMl * scale)} ml</span></li>`).join('');
+        const ingredientColors = ['#8b5cf6', '#38bdf8', '#f8c45c', '#36d58d', '#f472b6', '#fb923c'];
+        const ingredientBreakdown = cocktail.ingredients.map((item, index) => {
+            const amount = Number(item.amountMl) * scale;
+            const share = Math.max(0, Math.min(100, amount / size.volumeMl * 100));
+            return { name: item.name, amount, share, color: ingredientColors[index % ingredientColors.length] };
+        });
+        const ingredients = ingredientBreakdown.map(item => `<li class="ingredient-breakdown-row" aria-label="${escapeHtml(item.name)}: ${formatNumber(item.amount)} ml, ${formatNumber(item.share)} %"><span class="ingredient-breakdown-swatch" style="--ingredient-color:${item.color}" aria-hidden="true"></span><strong>${escapeHtml(item.name)}</strong><span>${formatNumber(item.amount)} ml</span></li>`).join('');
+        const ingredientComposition = `<section class="ingredient-composition" aria-label="Mengenverteilung im Cocktail"><div class="ingredient-composition-heading"><span>Zutatenverteilung</span><strong>${size.volumeMl} ml gesamt</strong></div><span class="ingredient-composition-bar" role="img" aria-label="${escapeHtml(ingredientBreakdown.map(item => `${item.name} ${formatNumber(item.share)} %`).join(', '))}">${ingredientBreakdown.map(item => `<span style="--ingredient-share:${item.share.toFixed(2)}%;--ingredient-color:${item.color}"></span>`).join('')}</span></section>`;
         const availability = getCocktailAvailability(cocktail, size);
         const sizes = state.sizes.map(item => {
             const sizeAvailability = getCocktailAvailability(cocktail, item);
             const disabled = sizeAvailability.status === 'unavailable';
-            return `<button class="size-option" data-size-id="${item.id}" aria-pressed="${item.id === size.id}" ${disabled ? 'disabled' : ''} title="${disabled ? escapeHtml(sizeAvailability.reason) : ''}"><strong>${escapeHtml(item.name)}</strong><br><small>${item.volumeMl} ml</small></button>`;
+            const selected = item.id === size.id;
+            return `<button class="size-option" data-size-id="${item.id}" aria-pressed="${selected}" ${disabled ? 'disabled' : ''} title="${disabled ? escapeHtml(sizeAvailability.reason) : ''}"><strong>${escapeHtml(item.name)}</strong><span class="size-option-volume">${item.volumeMl} ml</span></button>`;
         }).join('');
         const availabilityNote = availability.status === 'low'
             ? `<p class="availability-note low">Vorrat niedrig: ${escapeHtml(availability.lowIngredients.join(', '))}</p>`
@@ -538,7 +563,7 @@
         return `<div class="modal-scrim"></div><section class="cocktail-modal" role="dialog" aria-modal="true" aria-labelledby="cocktail-title">
             <button class="modal-close" aria-label="Dialog schließen">${icons.close}</button>
             <div class="modal-media"><img src="${safeImage(cocktail.imagePath)}" alt="${escapeHtml(cocktail.name)}" width="400" height="520"></div>
-            <div class="modal-body"><h2 id="cocktail-title">${escapeHtml(cocktail.name)}</h2><p class="modal-description">${escapeHtml(cocktail.description || '')}</p><ul class="ingredient-list">${ingredients}</ul><span class="field-label">Größe auswählen</span><div class="size-selector">${sizes}</div>${availabilityNote}<button class="primary-button wide-button start-dispense" ${availability.status === 'unavailable' ? 'disabled' : ''}>${startLabel}</button></div>
+            <div class="modal-body"><h2 id="cocktail-title">${escapeHtml(cocktail.name)}</h2><p class="modal-description">${escapeHtml(cocktail.description || '')}</p>${alcoholScaleMarkup(cocktail)}${ingredientComposition}<ul class="ingredient-list">${ingredients}</ul><div class="size-selector">${sizes}</div>${availabilityNote}<button class="primary-button wide-button start-dispense" ${availability.status === 'unavailable' ? 'disabled' : ''}>${startLabel}</button></div>
         </section>`;
     }
 
