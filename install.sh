@@ -751,19 +751,41 @@ cat > "$tty" <<'BANNER'
 
                     Mixstation
 
+                 .-=======-.
+                 \  * * *  /
+                  \-------/
+                   \     /
+                    \   /
+                     \ /
+                      V
+                      |
+                    __|__
+
 BANNER
 printf '\033[0m' > "$tty"
+cat > "$tty" <<'STEPS'
+  ✓  Display bereit
+  ○  Starte lokale CocktailOS-Dienste
+  ○  Prüfe lokale Verbindung
+  ○  Öffne Kiosk-Oberfläche
+
+STEPS
 
 frames=('|' '/' '-' '\\')
 frame=0
 while true; do
   if /usr/bin/curl --fail --silent --connect-timeout 1 --max-time 2 --output /dev/null "http://127.0.0.1:__PORT__/"; then
-    printf '\r\033[2K  \033[32m✓\033[0m  CocktailOS ist bereit. Oberfläche wird geladen …\n' > "$tty"
+    printf '\n' > "$tty"
+    cat > "$tty" <<'READY'
+  ✓  CocktailOS-Dienste gestartet
+  ✓  Lokale Verbindung bereit
+  ✓  Kiosk-Oberfläche wird geöffnet …
+READY
     sleep .2
     exit 0
   fi
 
-  printf '\r\033[2K  \033[35m%s\033[0m  CocktailOS wird gestartet …' "${frames[$frame]}" > "$tty"
+  printf '\r\033[2K  \033[35m%s\033[0m  Starte CocktailOS und prüfe lokale Verbindung …' "${frames[$frame]}" > "$tty"
   frame=$(((frame + 1) % ${#frames[@]}))
   sleep .15
 done
