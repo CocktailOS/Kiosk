@@ -13,6 +13,7 @@ public static class ApiEndpointExtensions
         api.MapImageEndpoints();
         api.MapBackupEndpoints();
         api.MapDispenseEndpoints();
+        api.MapGuestMenuEndpoints();
         return endpoints;
     }
 }

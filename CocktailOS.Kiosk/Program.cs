@@ -120,6 +120,7 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.MapCocktailOsApi();
+app.MapFallbackToFile("/menu", "menu.html");
 app.MapFallbackToFile("index.html");
 
 await using (var scope = app.Services.CreateAsyncScope())
@@ -133,9 +134,10 @@ await using (var scope = app.Services.CreateAsyncScope())
 await app.RunAsync();
 
 static bool IsPublicNetworkAccessPath(PathString path) =>
-    path == "/" || path == "/index.html" || path == "/app.css" || path == "/tokens.css" || path == "/app.js"
+    path == "/" || path == "/index.html" || path == "/app.css" || path == "/tokens.css" || path == "/app.js" || path == "/menu" || path == "/menu.html" || path == "/menu.css" || path == "/menu.js"
     || path.StartsWithSegments("/assets") || path.StartsWithSegments("/vendor") || path == "/api/network-access/status" || path == "/api/network-access/authenticate"
-    || path == "/api/admin-access/status" || path == "/api/admin-access/setup" || path == "/api/admin-access/authenticate";
+    || path == "/api/admin-access/status" || path == "/api/admin-access/setup" || path == "/api/admin-access/authenticate"
+    || path == "/api/menu/cocktails" || path == "/api/menu/qr";
 
 static bool IsAdminMutation(HttpRequest request)
 {

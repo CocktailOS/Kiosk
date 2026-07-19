@@ -1374,6 +1374,12 @@
         backupSection.innerHTML = `<header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.archive}</span><div><h2>Datensicherung</h2><p>Sichere Datenbank und hochgeladene Cocktailbilder lokal als ZIP-Datei – auch ohne Internetzugang.</p></div></header><div class="backup-actions"><a class="secondary-button" href="/api/backup" download>${icons.backupDownload}<span>Backup herunterladen</span></a><button type="button" class="secondary-button" data-backup-restore>${icons.backupRestore}<span>Backup wiederherstellen</span></button></div><p class="system-inline-note">Bei der Wiederherstellung werden Cocktails, Einstellungen, Bestände und eigene Bilder ersetzt. Eine Sicherheitskopie bleibt auf dem Gerät erhalten.</p>`;
         form.querySelector('.system-config-grid').append(backupSection);
         backupSection.querySelector('[data-backup-restore]').addEventListener('click', openBackupRestoreDialog);
+        const guestMenuButton = document.createElement('button');
+        guestMenuButton.type = 'button';
+        guestMenuButton.className = 'secondary-button repeat-intro-tour';
+        guestMenuButton.innerHTML = '<span>QR-Code zur Cocktailkarte</span>';
+        guestMenuButton.addEventListener('click', openGuestMenuQrDialog);
+        main.querySelector('.system-network-section').append(guestMenuButton);
         const repeatTourButton = document.createElement('button');
         repeatTourButton.type = 'button';
         repeatTourButton.className = 'secondary-button repeat-intro-tour';
@@ -1450,6 +1456,11 @@
                 showToast(error.message, true);
             }
         });
+    }
+
+    function openGuestMenuQrDialog() {
+        const layer = createSettingsDialog('guest-menu-qr-dialog');
+        setSettingsDialogContent(layer, 'Cocktailkarte teilen', 'Gäste können Rezepte ansehen, aber keinen Ausschank starten oder Einstellungen ändern.', '<div class="guest-menu-qr"><img src="/api/menu/qr" alt="QR-Code zur Cocktailkarte"><p>Der Netzwerkzugriff muss aktiviert sein, damit Gäste den Code mit ihrem Handy öffnen können.</p></div>');
     }
 
     function settingsListTemplate(title, intro, addLabel, content, icon) {
