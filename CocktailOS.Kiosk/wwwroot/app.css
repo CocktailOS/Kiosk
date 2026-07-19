@@ -72,6 +72,8 @@ html[data-theme="light"] .recipe-row .amount-input { background: #fff; }
 html[data-theme="light"] .settings-dialog { background: #fff; border-color: rgba(24,34,56,.14); }
 html[data-theme="light"] .option-card { background: #fff; }
 html[data-theme="light"] .option-card:has(input:checked) { background: rgba(124,58,237,.10); }
+html[data-theme="light"] .application-update-card,
+html[data-theme="light"] .system-option-card { background: #fff; }
 html[data-theme="light"] .system-note { background: #fff8e5; color: #715a1f; }
 html[data-theme="light"] .tab-button[aria-selected="true"] { color: #4c1d95; }
 html[data-theme="light"] .cocktail-modal,
@@ -1034,7 +1036,8 @@ html[data-theme="light"] .form-field input,
 html[data-theme="light"] .form-field select,
 html[data-theme="light"] .form-field textarea,
 html[data-theme="light"] .unit-input,
-html[data-theme="light"] .option-card { background: var(--surface-soft); }
+html[data-theme="light"] .option-card:not(.system-option-card):not(.system-network-toggle) { background: var(--surface-soft); }
+html[data-theme="light"] .system-network-toggle { background: #fff; }
 
 @media (max-width: 800px) {
     .settings-page { display: block; }
@@ -1518,6 +1521,7 @@ button, .primary-button, .secondary-button, .danger-button, .tab-button { white-
 .system-page-heading p, .system-section-heading p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
 .system-config-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .9fr); gap: 14px; align-items: stretch; }
 .system-section { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft); }
+.system-backup-section { grid-column: 1 / -1; }
 .system-hardware-section { grid-row: span 2; }
 .system-section-heading { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
 .system-section-icon { width: 32px; height: 32px; margin-top: 1px; border-radius: 10px; background: var(--surface-strong); }
@@ -1549,6 +1553,7 @@ button, .primary-button, .secondary-button, .danger-button, .tab-button { white-
 .system-safety-note > span { display: grid; flex: 0 0 18px; width: 18px; height: 18px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--bg); font-size: 12px; font-weight: 900; }
 .system-safety-note p { margin: 1px 0 0; font-size: 11px; line-height: 1.45; }
 .system-form-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.system-form-footer { display: none; }
 .system-form-footer p { margin: 0; color: var(--text-muted); font-size: 11px; }
 .system-form-footer .primary-button { flex: 0 0 auto; min-width: 258px; }
 
@@ -1689,26 +1694,7 @@ button, .primary-button, .secondary-button, .danger-button, .tab-button { white-
 .network-pin-login-copy { padding-right: 0; }
 .network-pin-setup-form .network-pin-step { grid-template-columns: 1fr; grid-template-rows: auto; }
 
-/* Guided first-run tour. */
-.intro-tour { display: grid; min-height: calc(100dvh - var(--header-height)); place-items: center; padding: 18px; background: var(--bg); box-sizing: border-box; }
-.intro-tour-card { display: grid; grid-template-rows: auto minmax(120px, 1fr) auto auto; width: min(720px, 100%); max-height: calc(100dvh - var(--header-height) - 36px); overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
-.intro-tour-header { display: flex; align-items: center; gap: 12px; padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
-.intro-tour-icon { display: grid; flex: 0 0 42px; width: 42px; height: 42px; place-items: center; border-radius: 12px; background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
-.intro-tour-icon svg { width: 22px; height: 22px; }
 .intro-tour-section { display: block; color: var(--primary); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
-.intro-tour-header h1 { margin: 2px 0 0; font-size: 23px; letter-spacing: -.03em; }
-.intro-tour-count { margin-left: auto; color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.intro-tour-preview { position: relative; display: flex; align-items: center; justify-content: center; min-height: 126px; margin: 18px 20px 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 20%, var(--surface-soft)), var(--surface-soft)); color: var(--primary); }
-.intro-tour-preview > span { position: relative; z-index: 1; display: grid; width: 64px; height: 64px; place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 36%, transparent); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
-.intro-tour-preview svg { width: 32px; height: 32px; }
-.intro-tour-preview i { position: absolute; width: 38%; height: 10px; border-radius: 999px; background: color-mix(in srgb, var(--primary) 22%, transparent); }
-.intro-tour-preview i:nth-of-type(1) { top: 22%; left: 8%; }
-.intro-tour-preview i:nth-of-type(2) { right: 10%; bottom: 28%; width: 24%; }
-.intro-tour-preview i:nth-of-type(3) { bottom: 15%; left: 14%; width: 32%; }
-.tour-preview-dispense, .tour-preview-clean { background: linear-gradient(135deg, color-mix(in srgb, #0ea5e9 28%, var(--surface-soft)), var(--surface-soft)); color: #0284c7; }
-.tour-preview-network, .tour-preview-finish { background: linear-gradient(135deg, color-mix(in srgb, #22c55e 22%, var(--surface-soft)), var(--surface-soft)); color: #15803d; }
-.intro-tour-copy { max-width: 62ch; margin: 16px 20px; color: var(--text-muted); font-size: 15px; line-height: 1.52; }
-.intro-tour-footer { display: grid; gap: 14px; padding: 0 20px 18px; }
 .intro-tour-progress { height: 6px; overflow: hidden; border-radius: 999px; background: var(--line); }
 .intro-tour-progress span { display: block; height: 100%; border-radius: inherit; background: var(--primary); transition: width 160ms ease; }
 .intro-tour-actions { display: flex; justify-content: flex-end; gap: 10px; }
@@ -1720,18 +1706,17 @@ button, .primary-button, .secondary-button, .danger-button, .tab-button { white-
 .intro-ui-tour-card p { margin: 0 0 14px; color: var(--text-muted); font-size: 14px; line-height: 1.45; }
 .intro-ui-tour-card .intro-tour-actions { margin-top: 14px; }
 .repeat-intro-tour { width: 100%; margin-top: 12px; }
+.backup-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.backup-actions .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; background: var(--surface); text-decoration: none; }
+.backup-actions svg { width: 18px; height: 18px; }
+.system-backup-section .system-section-heading p { max-width: none; }
+.backup-restore-dialog { width: min(560px, calc(100vw - 32px)); }
+.backup-restore-form { display: grid; gap: 18px; }
+.backup-restore-warning { display: flex; gap: 10px; padding: 12px; border: 1px solid var(--warning-border, #a16207); border-radius: 10px; background: var(--surface-soft); }
+.backup-restore-warning > span { display: grid; flex: 0 0 22px; width: 22px; height: 22px; place-items: center; border-radius: 50%; background: #a16207; color: #fff; font-weight: 800; }
+.backup-restore-warning p { margin: 0; font-size: 13px; line-height: 1.45; }
 
 @media (max-width: 700px), (max-height: 680px) {
-    .intro-tour { align-items: start; padding: 12px; }
-    .intro-tour-card { max-height: calc(100dvh - var(--header-height) - 24px); }
-    .intro-tour-header { padding: 13px 15px 11px; }
-    .intro-tour-icon { flex-basis: 36px; width: 36px; height: 36px; border-radius: 10px; }
-    .intro-tour-header h1 { font-size: 20px; }
-    .intro-tour-preview { min-height: 88px; margin: 12px 15px 0; }
-    .intro-tour-preview > span { width: 48px; height: 48px; border-radius: 14px; }
-    .intro-tour-preview svg { width: 25px; height: 25px; }
-    .intro-tour-copy { margin: 12px 15px; font-size: 13px; line-height: 1.42; }
-    .intro-tour-footer { gap: 10px; padding: 0 15px 14px; }
     .intro-tour-actions button { min-height: 42px; }
     .intro-ui-tour-card { bottom: 12px; left: 12px; width: min(390px, calc(100vw - 24px)); }
     .intro-ui-tour-card { padding: 14px; }

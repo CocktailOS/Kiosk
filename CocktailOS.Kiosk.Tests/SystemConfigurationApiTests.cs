@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.IO.Compression;
 using CocktailOS.Kiosk.Contracts;
 using CocktailOS.Kiosk.Services;
 using Microsoft.AspNetCore.Http;
@@ -9,6 +10,21 @@ namespace CocktailOS.Kiosk.Tests;
 
 public sealed class SystemConfigurationApiTests
 {
+    [Fact]
+    public async Task Backup_DownloadContainsDatabaseArchive()
+    {
+        using var factory = new KioskApplicationFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/backup");
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("application/zip", response.Content.Headers.ContentType?.MediaType);
+
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        Assert.Contains(archive.Entries, entry => entry.FullName == "cocktailos.db");
+    }
+
     [Fact]
     public async Task IntroTour_IsCompletedOnlyAfterTheExplicitCompletionRequest()
     {

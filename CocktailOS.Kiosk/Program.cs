@@ -29,6 +29,7 @@ builder.Services.AddSingleton<DispenseService>();
 builder.Services.AddSingleton<NetworkAccessPolicy>();
 builder.Services.AddSingleton<NetworkAccessPinService>();
 builder.Services.AddSingleton<NetworkAccessSessionService>();
+builder.Services.AddSingleton<BackupService>();
 
 var app = builder.Build();
 
@@ -142,6 +143,7 @@ static bool IsAdminMutation(HttpRequest request)
     var path = request.Path;
     return path.StartsWithSegments("/api/cocktails") || path.StartsWithSegments("/api/ingredients") || path.StartsWithSegments("/api/pumps")
         || path.StartsWithSegments("/api/sizes") || path.StartsWithSegments("/api/images") || path.StartsWithSegments("/api/system")
+        || path.StartsWithSegments("/api/backup")
         || path.StartsWithSegments("/api/cleaning") || path.StartsWithSegments("/api/priming") || path.StartsWithSegments("/api/calibrations")
         || path == "/api/app-update";
 }

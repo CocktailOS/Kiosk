@@ -11,6 +11,7 @@ public static class ApiEndpointExtensions
         api.MapSizeEndpoints();
         api.MapSystemEndpoints();
         api.MapImageEndpoints();
+        api.MapBackupEndpoints();
         api.MapDispenseEndpoints();
         return endpoints;
     }
