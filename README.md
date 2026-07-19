@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | 
 sudo reboot
 ```
 
-Nach dem Neustart startet CocktailOS automatisch auf dem angeschlossenen Display. Der Zugriff aus dem lokalen Netzwerk ist zunächst deaktiviert.
+Nach dem Neustart startet CocktailOS automatisch auf dem angeschlossenen Display. Linux-Konsolenmeldungen werden auf dem HDMI-Display ausgeblendet; stattdessen erscheint beim Start der CocktailOS-Startscreen. Der Zugriff aus dem lokalen Netzwerk ist zunächst deaktiviert.
 
 ### Headless oder über das Netzwerk
 

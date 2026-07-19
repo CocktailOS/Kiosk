@@ -35,8 +35,66 @@ Ohne Option startet CocktailOS auf dem angeschlossenen Display. Netzwerkzugriff 
 USAGE
 }
 
-log() { printf '[cocktailos-kiosk] %s\n' "$*"; }
-fail() { printf '[cocktailos-kiosk] FEHLER: %s\n' "$*" >&2; exit 1; }
+supports_terminal_ui() { [[ -t 1 && -t 2 && "${TERM:-dumb}" != "dumb" ]]; }
+
+show_banner() {
+  supports_terminal_ui && clear
+  printf '\n'
+  printf '\033[1;38;5;141m'
+  printf '   ____            _    _        _ _  ___  ____\n'
+  printf '  / ___|___   ___| | _| |_ __ _(_) |/ _ \/ ___|\n'
+  printf ' | |   / _ \\ / __| |/ / __/ _` | | | | | \___ \\\n'
+  printf ' | |__| (_) | (__|   <| || (_| | | | |_| |___) |\n'
+  printf '  \\____\\___/ \\___|_|\\_\\__\\__,_|_|_|\\___/|____/\n'
+  printf '\033[0m'
+  printf '\033[38;5;183m              Mixstation-Installer\033[0m\n\n'
+  printf '                 .-=========-.\n'
+  printf "                 \\'-=======-' /\n"
+  printf '                  _|   .-.   |_\n'
+  printf '                 ((|  (   )  |))\n'
+  printf '                  \\|   `-`   |//\n'
+  printf '                   \\         //\n'
+  printf '                    `\\       /`\n'
+  printf '                      `-._.-`\n\n'
+}
+
+log() { printf '  %s\n' "$*"; }
+fail() { printf '\n[cocktailos-kiosk] FEHLER: %s\n' "$*" >&2; exit 1; }
+
+run_step() {
+  local message="$1" log_file pid frame_index=0 exit_code
+  shift
+  log_file="$(mktemp)"
+
+  if supports_terminal_ui; then
+    "$@" >"$log_file" 2>&1 &
+    pid=$!
+    local frames=('|' '/' '-' '\\')
+    while kill -0 "$pid" 2>/dev/null; do
+      printf '\r\033[2K  \033[38;5;141m%s\033[0m  %s' "${frames[$frame_index]}" "$message"
+      frame_index=$(((frame_index + 1) % ${#frames[@]}))
+      sleep 0.12
+    done
+    if wait "$pid"; then
+      printf '\r\033[2K  \033[38;5;82m✓\033[0m  %s\n' "$message"
+    else
+      exit_code=$?
+      printf '\r\033[2K  \033[38;5;196m✗\033[0m  %s\n' "$message" >&2
+      cat "$log_file" >&2
+      rm -f "$log_file"
+      return "$exit_code"
+    fi
+  else
+    printf '  ... %s\n' "$message"
+    if ! "$@" >"$log_file" 2>&1; then
+      cat "$log_file" >&2
+      rm -f "$log_file"
+      return 1
+    fi
+  fi
+
+  rm -f "$log_file"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -72,6 +130,8 @@ if [[ "${EUID}" -ne 0 ]]; then
   fail "Bitte als root ausführen, zum Beispiel: curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash"
 fi
 
+show_banner
+
 install_base_packages() {
   local missing=()
   for command_name in curl python3 tar sha256sum systemctl sudo; do
@@ -80,9 +140,8 @@ install_base_packages() {
 
   [[ "${#missing[@]}" -eq 0 ]] && return
   command -v apt-get >/dev/null 2>&1 || fail "Fehlende Befehle: ${missing[*]}"
-  log "Installiere Grundpakete: ${missing[*]}"
-  apt-get update
-  apt-get install -y ca-certificates curl python3 coreutils tar systemd sudo
+  run_step "Aktualisiere Paketquellen" apt-get update
+  run_step "Installiere Grundpakete: ${missing[*]}" apt-get install -y ca-certificates curl python3 coreutils tar systemd sudo
 }
 
 install_display_packages() {
@@ -92,12 +151,11 @@ install_display_packages() {
   fi
 
   command -v apt-get >/dev/null 2>&1 || fail "Der Displaymodus benötigt Cage und Chromium. Installiere diese manuell oder verwende --headless."
-  log "Installiere Cage und Chromium für den Wayland-Kiosk"
-  apt-get update
+  run_step "Aktualisiere Paketquellen" apt-get update
   if apt-cache show chromium >/dev/null 2>&1; then
-    apt-get install -y cage chromium
+    run_step "Installiere Cage und Chromium" apt-get install -y cage chromium
   else
-    apt-get install -y cage chromium-browser
+    run_step "Installiere Cage und Chromium" apt-get install -y cage chromium-browser
   fi
 }
 
@@ -112,6 +170,17 @@ find_boot_config() {
   fail "Keine Raspberry-Pi-Boot-Konfiguration gefunden. Verwende auf anderen Systemen --headless."
 }
 
+find_boot_cmdline() {
+  local candidate
+  for candidate in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+  fail "Keine Raspberry-Pi-Kernel-Kommandozeile gefunden. Verwende auf anderen Systemen --headless."
+}
+
 set_boot_config_value() {
   local file="$1" key="$2" value="$3"
   local escaped_key="${key//./\\.}"
@@ -119,18 +188,38 @@ set_boot_config_value() {
   printf '%s=%s\n' "$key" "$value" >> "$file"
 }
 
+configure_quiet_boot() {
+  local cmdline_file
+  cmdline_file="$(find_boot_cmdline)"
+  CMDLINE_FILE="$cmdline_file" python3 - <<'PY'
+from pathlib import Path
+import os
+
+path = Path(os.environ["CMDLINE_FILE"])
+tokens = path.read_text(encoding="utf-8").split()
+remove_prefixes = ("loglevel=", "vt.global_cursor_default=", "systemd.show_status=")
+tokens = [token for token in tokens
+          if token not in {"quiet", "splash", "logo.nologo"}
+          and not token.startswith("console=tty")
+          and not token.startswith(remove_prefixes)]
+tokens.extend(["quiet", "splash", "logo.nologo", "loglevel=3", "systemd.show_status=false", "vt.global_cursor_default=0", "console=tty3"])
+path.write_text(" ".join(tokens) + "\n", encoding="utf-8")
+PY
+}
+
 configure_display() {
   local boot_config
   boot_config="$(find_boot_config)"
-  log "Konfiguriere 1024x600-HDMI-Display in ${boot_config}"
   set_boot_config_value "$boot_config" "hdmi_force_hotplug" "1"
   set_boot_config_value "$boot_config" "max_usb_current" "1"
   set_boot_config_value "$boot_config" "hdmi_group" "2"
   set_boot_config_value "$boot_config" "hdmi_mode" "87"
   set_boot_config_value "$boot_config" "hdmi_cvt" "1024 600 60 6 0 0 0"
   set_boot_config_value "$boot_config" "hdmi_drive" "1"
+  set_boot_config_value "$boot_config" "disable_splash" "1"
   sed -i -E '/^[[:space:]]*dtoverlay[[:space:]]*=[[:space:]]*vc4-(fkms|kms)-v3d([,[:space:]]|$)/d' "$boot_config"
   printf '%s\n' 'dtoverlay=vc4-fkms-v3d' >> "$boot_config"
+  configure_quiet_boot
 }
 
 github_api() {
@@ -220,7 +309,7 @@ fi
 
 if [[ "$MODE" == "display" ]]; then
   install_display_packages
-  configure_display
+  run_step "Konfiguriere 1024x600-HDMI-Display" configure_display
 fi
 
 TMP_DIR="$(mktemp -d)"
@@ -228,8 +317,10 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 API_ROOT="https://api.github.com/repos/${REPO}"
 
 if [[ -n "$TAG" ]]; then
+  log "Prüfe die gewünschte CocktailOS-Version"
   RELEASES_JSON="$(github_api "${API_ROOT}/releases/tags/${TAG}")"
 else
+  log "Prüfe verfügbare CocktailOS-Versionen"
   RELEASES_JSON="$(github_api "${API_ROOT}/releases?per_page=50")"
 fi
 RELEASE_JSON="$(select_release "$RELEASES_JSON")" || fail "Keine passende GitHub-Release gefunden."
@@ -240,9 +331,8 @@ CHECKSUM_URL="$(select_asset_url "$RELEASE_JSON" "${ASSET_SUFFIX}.sha256")" || f
 ARCHIVE_PATH="${TMP_DIR}/cocktailos-kiosk.tar.gz"
 CHECKSUM_PATH="${TMP_DIR}/cocktailos-kiosk.tar.gz.sha256"
 
-log "Lade ${RELEASE_TAG} für ${RUNTIME}"
-download_file "$ARCHIVE_URL" "$ARCHIVE_PATH"
-download_file "$CHECKSUM_URL" "$CHECKSUM_PATH"
+run_step "Lade CocktailOS ${RELEASE_TAG}" download_file "$ARCHIVE_URL" "$ARCHIVE_PATH"
+run_step "Lade Prüfsumme" download_file "$CHECKSUM_URL" "$CHECKSUM_PATH"
 EXPECTED_HASH="$(awk '{print $1}' "$CHECKSUM_PATH")"
 ACTUAL_HASH="$(sha256sum "$ARCHIVE_PATH" | awk '{print $1}')"
 [[ "$EXPECTED_HASH" == "$ACTUAL_HASH" ]] || fail "Prüfsummenprüfung fehlgeschlagen."
@@ -524,10 +614,12 @@ chown root:root "$PIN_RESET_SCRIPT"
 KIOSK_SERVICE_NAME="${SERVICE_NAME}-cage"
 KIOSK_SERVICE_FILE="/etc/systemd/system/${KIOSK_SERVICE_NAME}.service"
 KIOSK_SCRIPT="/usr/local/lib/cocktailos-kiosk/cage-session"
+STARTUP_SPLASH_PATH="/usr/local/share/cocktailos-kiosk/startup.html"
 LEGACY_DISPLAY_SERVICE_NAME="${SERVICE_NAME}-display"
 LEGACY_DISPLAY_SERVICE_FILE="/etc/systemd/system/${LEGACY_DISPLAY_SERVICE_NAME}.service"
 if [[ "$MODE" == "display" ]]; then
   install -d -m 0755 /usr/local/lib/cocktailos-kiosk
+  install -d -m 0755 /usr/local/share/cocktailos-kiosk
   install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "${DATA_ROOT}/runtime" "${DATA_ROOT}/browser"
   install -d -m 0755 /etc/chromium/policies/managed
   cat > /etc/chromium/policies/managed/cocktailos-kiosk.json <<'CHROMIUM_POLICY'
@@ -537,6 +629,97 @@ if [[ "$MODE" == "display" ]]; then
 CHROMIUM_POLICY
   chmod 0644 /etc/chromium/policies/managed/cocktailos-kiosk.json
   chown root:root /etc/chromium/policies/managed/cocktailos-kiosk.json
+  cat > "$STARTUP_SPLASH_PATH" <<'SPLASH'
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CocktailOS startet</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; overflow: hidden; background: radial-gradient(circle at 50% -30%, rgba(124,58,237,.16), transparent 44%), #0a0e15; color: #f8fafc; font: 16px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .topbar { height: 68px; display: flex; align-items: center; padding: 0 28px; border-bottom: 1px solid rgba(255,255,255,.08); background: rgba(12,18,31,.88); }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 13px; background: rgba(124,58,237,.16); border: 1px solid rgba(124,58,237,.42); color: #a78bfa; }
+    .brand-mark svg { width: 23px; height: 23px; }
+    .brand strong, .brand small { display: block; }
+    .brand strong { font-size: 17px; line-height: 1.1; }
+    .brand small { margin-top: 2px; color: #a9b5c8; font-size: 12px; }
+    main { min-height: calc(100vh - 68px); display: grid; place-items: center; padding: 28px; }
+    .startup-card { width: min(520px, 100%); padding: 30px; border: 1px solid #334158; border-radius: 20px; background: #121923; box-shadow: 0 14px 36px rgba(0,0,0,.32); }
+    .eyebrow { margin: 0 0 7px; color: #a78bfa; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 36px); letter-spacing: -.04em; }
+    .intro { margin: 8px 0 24px; color: #a9b5c8; }
+    .steps { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
+    .step { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 11px 13px; border: 1px solid transparent; border-radius: 14px; color: #a9b5c8; }
+    .step-dot { width: 22px; height: 22px; flex: 0 0 22px; border: 2px solid #536279; border-radius: 50%; }
+    .step-copy { display: grid; gap: 1px; }
+    .step strong { color: inherit; font-size: 14px; }
+    .step small { font-size: 12px; }
+    .step.is-active { border-color: rgba(124,58,237,.55); background: rgba(124,58,237,.11); color: #f8fafc; }
+    .step.is-active .step-dot { border-color: #a78bfa; border-top-color: transparent; animation: spin .8s linear infinite; }
+    .step.is-done { color: #dce5f2; }
+    .step.is-done .step-dot { display: grid; place-items: center; border-color: #36d58d; background: #36d58d; color: #092519; }
+    .step.is-done .step-dot::after { content: "✓"; font-weight: 900; font-size: 14px; }
+    .footer { display: flex; align-items: center; gap: 9px; margin: 24px 0 0; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.08); color: #a9b5c8; font-size: 13px; }
+    .footer-spinner { width: 14px; height: 14px; border: 2px solid #536279; border-top-color: #a78bfa; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" focusable="false"><path d="M12 12 4.207 4.207A.707.707 0 0 1 4.707 3h14.586a.707.707 0 0 1 .5 1.207z"/><path d="M12 12v10"/><path d="M7 22h10"/></svg></span>
+      <span><strong>CocktailOS</strong><small>Mixstation</small></span>
+    </div>
+  </header>
+  <main>
+    <section class="startup-card" aria-live="polite">
+      <p class="eyebrow">Systemstart</p>
+      <h1>Mixstation wird vorbereitet</h1>
+      <p class="intro">CocktailOS startet lokal auf diesem Gerät.</p>
+      <ol class="steps">
+        <li class="step is-active"><span class="step-dot" aria-hidden="true"></span><span class="step-copy"><strong>Starte CocktailOS</strong><small>Lokale Dienste werden vorbereitet</small></span></li>
+        <li class="step"><span class="step-dot" aria-hidden="true"></span><span class="step-copy"><strong>Prüfe Verbindung</strong><small>Warte auf die Mixstation</small></span></li>
+        <li class="step"><span class="step-dot" aria-hidden="true"></span><span class="step-copy"><strong>Lade Oberfläche</strong><small>Gleich geht es los</small></span></li>
+      </ol>
+      <p class="footer"><span class="footer-spinner" aria-hidden="true"></span><span id="status">CocktailOS wird gestartet …</span></p>
+    </section>
+  </main>
+  <script>
+    const appUrl = 'http://127.0.0.1:__PORT__/';
+    const status = document.getElementById('status');
+    const steps = [...document.querySelectorAll('.step')];
+    const startedAt = Date.now();
+    const delay = milliseconds => new Promise(resolve => window.setTimeout(resolve, milliseconds));
+    function setStep(index) {
+      steps.forEach((step, current) => step.className = current < index ? 'step is-done' : current === index ? 'step is-active' : 'step');
+    }
+    async function waitForCocktailOs() {
+      setStep(0);
+      await delay(300);
+      setStep(1);
+      try {
+        await fetch(appUrl + '?startup=' + Date.now(), { cache: 'no-store', mode: 'no-cors' });
+        setStep(2);
+        status.textContent = 'Oberfläche wird geladen …';
+        await delay(350);
+        window.location.replace(appUrl);
+      } catch {
+        if (Date.now() - startedAt > 30000) status.textContent = 'Der Start dauert etwas länger …';
+        window.setTimeout(waitForCocktailOs, 500);
+      }
+    }
+    waitForCocktailOs();
+  </script>
+</body>
+</html>
+SPLASH
+  sed -i "s/__PORT__/${PORT}/g" "$STARTUP_SPLASH_PATH"
+  chmod 0644 "$STARTUP_SPLASH_PATH"
+  chown root:root "$STARTUP_SPLASH_PATH"
   if [[ -f /etc/X11/Xwrapper.config ]] && grep -q 'Managed by CocktailOS Kiosk install.sh.' /etc/X11/Xwrapper.config; then
     rm -f /etc/X11/Xwrapper.config
   fi
@@ -589,27 +772,14 @@ args=(
   --overscroll-history-navigation=0
 )
 
-for ((attempt = 1; attempt <= 60; attempt++)); do
-  if /usr/bin/curl --fail --silent --show-error --connect-timeout 1 --max-time 2 --output /dev/null "http://127.0.0.1:${PORT}/"; then
-    break
-  fi
-
-  if (( attempt == 60 )); then
-    echo "CocktailOS API ist nach 60 Sekunden noch nicht erreichbar." >&2
-    exit 1
-  fi
-
-  sleep 1
-done
-
-exec /usr/bin/cage -- "\${chromium_bin}" "\${args[@]}" "http://127.0.0.1:${PORT}"
+exec /usr/bin/cage -- "\${chromium_bin}" "\${args[@]}" "file://${STARTUP_SPLASH_PATH}"
 KIOSK
   chmod 0755 "$KIOSK_SCRIPT"
   chown root:root "$KIOSK_SCRIPT"
   cat > "$KIOSK_SERVICE_FILE" <<KIOSK_SERVICE
 [Unit]
 Description=CocktailOS Kiosk on Cage
-After=${SERVICE_NAME}.service systemd-user-sessions.service
+After=systemd-user-sessions.service
 Wants=${SERVICE_NAME}.service
 Conflicts=display-manager.service getty@tty1.service
 
@@ -637,16 +807,13 @@ else
 fi
 rm -f "$LEGACY_DISPLAY_SERVICE_FILE"
 
-log "Aktiviere Dienste (${MODE})"
-systemctl daemon-reload
-systemctl enable "$SERVICE_NAME"
-systemctl restart "$SERVICE_NAME"
+run_step "Aktualisiere Systemdienste" systemctl daemon-reload
+run_step "Starte CocktailOS" systemctl enable --now "$SERVICE_NAME"
 if [[ "$MODE" == "display" ]]; then
   systemctl disable --now display-manager.service 2>/dev/null || true
   systemctl stop "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
   systemctl disable --now "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
-  systemctl enable "$KIOSK_SERVICE_NAME"
-  systemctl restart "$KIOSK_SERVICE_NAME"
+  run_step "Starte die Kiosk-Oberfläche" systemctl enable --now "$KIOSK_SERVICE_NAME"
 else
   systemctl disable --now "$KIOSK_SERVICE_NAME" 2>/dev/null || true
   systemctl stop "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
