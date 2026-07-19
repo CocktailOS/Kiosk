@@ -231,14 +231,13 @@ github_api() {
 
 select_release() {
   local releases_json="$1"
-  JSON_INPUT="$releases_json" python3 - "$TAG" "$INCLUDE_PRERELEASE" <<'PY'
+  python3 -c '
 import json
-import os
 import sys
 
 requested_tag = sys.argv[1]
 include_prerelease = sys.argv[2].lower() == "true"
-releases = json.loads(os.environ["JSON_INPUT"])
+releases = json.load(sys.stdin)
 if isinstance(releases, dict):
     releases = [releases]
 
@@ -252,32 +251,31 @@ for release in releases:
     print(json.dumps(release))
     sys.exit(0)
 sys.exit(1)
-PY
+' "$TAG" "$INCLUDE_PRERELEASE" <<< "$releases_json"
 }
 
 select_asset_url() {
   local release_json="$1" suffix="$2"
-  JSON_INPUT="$release_json" python3 - "$suffix" <<'PY'
+  python3 -c '
 import json
-import os
 import sys
 
 suffix = sys.argv[1]
-for asset in json.loads(os.environ["JSON_INPUT"]).get("assets", []):
+for asset in json.load(sys.stdin).get("assets", []):
     if asset.get("name", "").endswith(suffix):
         print(asset["browser_download_url"])
         sys.exit(0)
 sys.exit(1)
-PY
+' "$suffix" <<< "$release_json"
 }
 
 json_value() {
-  JSON_INPUT="$1" python3 - "$2" <<'PY'
+  local value="$1" key="$2"
+  python3 -c '
 import json
-import os
 import sys
-print(json.loads(os.environ["JSON_INPUT"]).get(sys.argv[1], ""))
-PY
+print(json.load(sys.stdin).get(sys.argv[1], ""))
+' "$key" <<< "$value"
 }
 
 download_file() {
