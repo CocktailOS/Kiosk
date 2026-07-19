@@ -389,10 +389,24 @@ args=(
   --use-gl=egl
   --enable-gpu-rasterization
   --ignore-gpu-blocklist
-  --disable-features=Translate,MediaRouter,OptimizationHints,OverscrollHistoryNavigation
+  --disable-translate
+  --disable-features=Translate,TranslateUI,MediaRouter,OptimizationHints,OverscrollHistoryNavigation
   --disable-pinch
   --overscroll-history-navigation=0
 )
+
+for ((attempt = 1; attempt <= 60; attempt++)); do
+  if /usr/bin/curl --fail --silent --show-error --connect-timeout 1 --max-time 2 --output /dev/null "http://127.0.0.1:${PORT}/"; then
+    break
+  fi
+
+  if (( attempt == 60 )); then
+    echo "CocktailOS API ist nach 60 Sekunden noch nicht erreichbar." >&2
+    exit 1
+  fi
+
+  sleep 1
+done
 
 exec /usr/bin/cage -- "\${chromium_bin}" "\${args[@]}" "http://127.0.0.1:${PORT}"
 KIOSK
