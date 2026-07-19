@@ -14,6 +14,7 @@
         version: '',
         update: null,
         adminAccess: { pinConfigured: false, isAuthenticated: false },
+        isIntroTourActive: false,
         activeTab: 'cocktails',
         editing: null,
         cocktailDraft: null,
@@ -44,6 +45,7 @@
         prime: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 20V8.5a6 6 0 0 1 12 0V20"/><path d="M3 20h18M9 12h6M12 4v8"/><path d="M12 16v2"/></svg>',
         raspberryPi: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 8h8v8H8zM2 9h2M2 15h2M20 9h2M20 15h2M9 2v2M15 2v2M9 20v2M15 20v2"/></svg>',
         download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>',
+        tour: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="m15.5 8.5-2.1 4.8-4.8 2.1 2.1-4.8z"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>',
         calibrate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="m12 13 4-4"/><path d="M6 17h12"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></svg>',
         lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/></svg>',
         refill: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3S6.5 9.1 6.5 14a5.5 5.5 0 0 0 11 0C17.5 9.1 12 3 12 3Z"/><path d="M12 10v7M8.5 13.5h7"/></svg>',
@@ -89,11 +91,16 @@
                 return;
             }
             state.adminAccess = await api('/api/admin-access/status');
+            await loadAll();
+            const introTour = await api('/api/intro-tour/status');
+            if (!introTour.completed && !state.adminAccess.pinConfigured) {
+                renderGuidedUiTour();
+                return;
+            }
             if (!state.adminAccess.pinConfigured) {
                 renderAppPinSetup();
                 return;
             }
-            await loadAll();
             renderRoute();
             const current = await api('/api/dispenses/current');
             if (current.status === 'running') {
@@ -228,6 +235,116 @@
                 }
             }
         });
+    }
+
+    function renderIntroTour() {
+        const steps = [
+            { section: 'Willkommen', title: 'Willkommen bei CocktailOS', text: 'In wenigen Schritten lernst du die Mixstation kennen. Danach richtest du deinen persönlichen App-PIN ein.', icon: icons.logo, preview: 'tour-preview-welcome' },
+            { section: 'Startseite', title: 'Deine Cocktail-Übersicht', text: 'Auf der Startseite siehst du alle verfügbaren Cocktails. Tippe einfach auf eine Karte, um einen Drink auszuwählen.', icon: icons.cocktail, preview: 'tour-preview-home' },
+            { section: 'Startseite', title: 'Cocktail auswählen', text: 'Die Cocktailkarte öffnet die Rezeptansicht. Dort siehst du Zutaten und die verfügbare Menge.', icon: icons.cocktail, preview: 'tour-preview-cocktail' },
+            { section: 'Startseite', title: 'Größe auswählen', text: 'Wähle Klein, Normal oder Groß. CocktailOS passt die Zutatenmengen automatisch an die gewünschte Größe an.', icon: icons.size, preview: 'tour-preview-size' },
+            { section: 'Startseite', title: 'Ausschenken starten', text: 'Mit „Cocktail starten“ beginnt der Ausschank. Währenddessen zeigt dir der Fortschritt den aktuellen Stand; mit Stopp werden alle Pumpen sofort ausgeschaltet.', icon: icons.play, preview: 'tour-preview-dispense' },
+            { section: 'Einstellungen · Cocktails', title: 'Cocktails anlegen', text: 'Im Adminbereich verwaltest du Cocktails. Über „Cocktail anlegen“ vergibst du Name, Bild, Standardgröße und Rezeptzutaten.', icon: icons.cocktail, preview: 'tour-preview-admin' },
+            { section: 'Einstellungen · Zutaten', title: 'Zutaten und Vorräte', text: 'Lege Zutaten mit Flaschengröße und Startbestand an. Mit „Auffüllen“ setzt du den Vorrat nach einem Flaschenwechsel wieder hoch.', icon: icons.refill, preview: 'tour-preview-ingredient' },
+            { section: 'Einstellungen · Pumpen', title: 'Pumpen anlegen und GPIO zuordnen', text: 'Jede Pumpe erhält eine Zutat, GPIO-Pin, Förderrate und Relaislogik. Der GPIO-Dialog hilft bei der sicheren Pin-Auswahl.', icon: icons.raspberryPi, preview: 'tour-preview-pump' },
+            { section: 'Einstellungen · Pumpen', title: 'Pumpen kalibrieren', text: 'Die Kalibrierung führt durch einen Messlauf. Gib danach die gemessene Menge ein, damit CocktailOS die Förderrate korrekt berechnet.', icon: icons.calibrate, preview: 'tour-preview-calibrate' },
+            { section: 'Einstellungen · Pumpen', title: 'Schläuche füllen', text: 'Mit „Füllen“ lässt du eine Pumpe nur solange laufen, wie du die Taste gedrückt hältst. So befüllst du neue oder leere Schläuche kontrolliert.', icon: icons.prime, preview: 'tour-preview-prime' },
+            { section: 'Einstellungen · Pumpen', title: 'Reinigungsmodus', text: 'Im Reinigungsmodus wählst du Pumpen und Laufzeit. Das ist für Wasser oder Reinigungslösung gedacht; Stopp beendet den Vorgang sofort.', icon: icons.clean, preview: 'tour-preview-clean' },
+            { section: 'Einstellungen · Größen', title: 'Größen anlegen', text: 'Unter Größen legst du weitere Glasgrößen an. Rezepte werden beim Ausschank proportional auf diese Größe skaliert.', icon: icons.size, preview: 'tour-preview-size-admin' },
+            { section: 'Einstellungen · System', title: 'Dummy oder Raspberry Pi GPIO', text: 'Der Dummy-Treiber simuliert Pumpen für sicheres Testen. GPIO schaltet die angeschlossene Hardware am Raspberry Pi.', icon: icons.settings, preview: 'tour-preview-system' },
+            { section: 'Einstellungen · System', title: 'Netzwerkzugriff', text: 'Aktiviere Fernzugriff nur in vertrauenswürdigen Netzwerken. Geräte im Netzwerk verwenden dafür denselben App-PIN.', icon: icons.lock, preview: 'tour-preview-network' },
+            { section: 'Einstellungen · System', title: 'Updates', text: 'Unter Software siehst du die installierte Version, prüfst auf Aktualisierungen und installierst verfügbare Updates.', icon: icons.download, preview: 'tour-preview-update' },
+            { section: 'Fertig', title: 'Alles gesehen', text: 'Jetzt richtest du deinen vierstelligen App-PIN ein. Er schützt die Adminansicht und wird auch für den Netzwerkzugriff verwendet.', icon: icons.lock, preview: 'tour-preview-finish' }
+        ];
+        let index = 0;
+        const draw = () => {
+            const step = steps[index];
+            const finalStep = index === steps.length - 1;
+            app.innerHTML = `${headerTemplate()}<main class="intro-tour" id="app-main"><section class="intro-tour-card" aria-live="polite"><header class="intro-tour-header"><span class="intro-tour-icon" aria-hidden="true">${step.icon}</span><div><span class="intro-tour-section">${escapeHtml(step.section)}</span><h1>${escapeHtml(step.title)}</h1></div><span class="intro-tour-count">${index + 1} / ${steps.length}</span></header><div class="intro-tour-preview ${step.preview}" aria-hidden="true"><span>${step.icon}</span><i></i><i></i><i></i></div><p class="intro-tour-copy">${escapeHtml(step.text)}</p><footer class="intro-tour-footer"><div class="intro-tour-progress" aria-label="Schritt ${index + 1} von ${steps.length}"><span style="width:${((index + 1) / steps.length) * 100}%"></span></div><div class="intro-tour-actions">${index ? '<button type="button" class="secondary-button" data-tour-back>Zurück</button>' : ''}<button type="button" class="primary-button" data-tour-next>${finalStep ? 'App-PIN einrichten' : 'Weiter'}</button></div></footer></section></main>`;
+            app.querySelector('[data-tour-back]')?.addEventListener('click', () => { index -= 1; draw(); });
+            app.querySelector('[data-tour-next]').addEventListener('click', async event => {
+                if (!finalStep) { index += 1; draw(); return; }
+                event.currentTarget.disabled = true;
+                event.currentTarget.textContent = 'Wird vorbereitet …';
+                try {
+                    await api('/api/intro-tour/complete', { method: 'POST' });
+                    renderAppPinSetup();
+                } catch (error) {
+                    event.currentTarget.disabled = false;
+                    event.currentTarget.textContent = 'App-PIN einrichten';
+                    showToast(error.message, true);
+                }
+            });
+        };
+        draw();
+    }
+
+    function renderGuidedUiTour({ repeat = false } = {}) {
+        state.isIntroTourActive = true;
+        const firstCocktail = state.cocktails[0];
+        const showHome = () => { app.querySelector('.modal-layer')?.remove(); renderHome(); };
+        const showCocktail = () => { showHome(); if (firstCocktail) openCocktail(firstCocktail.id); };
+        const showSettings = tab => { app.querySelector('.modal-layer')?.remove(); state.activeTab = tab; renderSettings(); };
+        const steps = [
+            { title: 'Willkommen bei CocktailOS', text: 'Wir führen dich direkt durch die echte Oberfläche. Danach richtest du deinen App-PIN ein.', show: showHome, target: '.home-heading' },
+            { title: 'Cocktail-Übersicht', text: 'Hier erscheinen alle verfügbaren Cocktails. Tippe später auf eine Karte, um einen Drink auszuwählen.', show: showHome, target: '.cocktail-scroller' },
+            { title: 'Cocktail auswählen', text: 'Eine Karte öffnet die Rezeptansicht mit Zutaten und Verfügbarkeit.', show: showCocktail, target: '.cocktail-modal' },
+            { title: 'Größe auswählen', text: 'Wähle die gewünschte Größe. Die Mengen werden automatisch proportional angepasst.', show: showCocktail, target: '.size-selector' },
+            { title: 'Ausschenken', text: 'Dieser Knopf startet den Ausschank. Währenddessen kannst du den Vorgang jederzeit sicher stoppen.', show: showCocktail, target: '.start-dispense' },
+            { title: 'Cocktails anlegen', text: 'Im Adminbereich legst du neue Rezepte mit Bild, Standardgröße und Zutaten an.', show: () => showSettings('cocktails'), target: '.add-entity' },
+            { title: 'Zutaten anlegen', text: 'Hier erfasst du Zutaten, Flaschengröße, aktuellen Bestand und Alkoholgehalt.', show: () => showSettings('ingredients'), target: '.add-entity' },
+            { title: 'Vorrat auffüllen', text: 'Nach einem Flaschenwechsel setzt „Auffüllen“ den Bestand auf die hinterlegte Flaschengröße.', show: () => showSettings('ingredients'), target: '[data-refill]' },
+            { title: 'Pumpen anlegen', text: 'Für jede Pumpe hinterlegst du Zutat, Förderrate, Relaislogik und GPIO-Pin.', show: () => showSettings('pumps'), target: '.add-entity' },
+            { title: 'GPIO-Pin auswählen', text: 'Der GPIO-Dialog zeigt den Raspberry-Pi-Header und verhindert doppelt belegte Pins.', show: () => { showSettings('pumps'); openPumpEditor(); }, target: '.gpio-map-trigger' },
+            { title: 'Pumpen kalibrieren', text: 'Der Assistent misst die echte Fördermenge, damit Ausschankmengen stimmen.', show: () => showSettings('pumps'), target: '[data-calibrate]' },
+            { title: 'Schläuche füllen', text: '„Füllen“ läuft nur, solange die Taste gedrückt wird – ideal nach dem Wechsel einer Flasche.', show: () => showSettings('pumps'), target: '[data-prime]' },
+            { title: 'Reinigungsmodus', text: 'Hier wählst du Pumpen und Laufzeit für Wasser oder Reinigungslösung.', show: () => showSettings('pumps'), target: '.cleaning-mode-button' },
+            { title: 'Größen anlegen', text: 'Neue Glasgrößen werden später für alle Rezepte automatisch skaliert.', show: () => showSettings('sizes'), target: '.add-entity' },
+            { title: 'Dummy oder GPIO', text: 'Dummy simuliert Pumpen sicher. GPIO schaltet die angeschlossene Raspberry-Pi-Hardware.', show: () => showSettings('system'), target: '.system-hardware-section' },
+            { title: 'Netzwerkzugriff', text: 'Aktiviere ihn nur in vertrauenswürdigen Netzwerken. Er verwendet denselben App-PIN.', show: () => showSettings('system'), target: '.system-network-section' },
+            { title: 'Updates', text: 'Hier prüfst und installierst du verfügbare Software-Updates.', show: () => showSettings('system'), target: '.system-update-section' },
+            { title: 'Alles gesehen', text: repeat ? 'Du hast die Tour erneut durchlaufen. Du kannst nun direkt mit den Einstellungen weiterarbeiten.' : 'Als Nächstes vergibst du deinen vierstelligen App-PIN. Er schützt die Adminansicht und den Netzwerkzugriff.', show: showHome, target: '.settings-button', final: true }
+        ];
+        let index = 0;
+        let highlighted;
+        const clear = () => {
+            highlighted?.classList.remove('intro-tour-target');
+            highlighted = null;
+            app.querySelector('.intro-ui-tour')?.remove();
+        };
+        const draw = () => {
+            clear();
+            const step = steps[index];
+            step.show();
+            app.querySelectorAll('input, select, textarea, button').forEach(control => { control.disabled = true; });
+            highlighted = app.querySelector(step.target);
+            highlighted?.classList.add('intro-tour-target');
+            requestAnimationFrame(() => highlighted?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }));
+            const layer = document.createElement('section');
+            layer.className = 'intro-ui-tour';
+            layer.setAttribute('role', 'dialog');
+            layer.setAttribute('aria-modal', 'true');
+            layer.innerHTML = `<div class="intro-ui-tour-card"><span class="intro-tour-section">Schritt ${index + 1} von ${steps.length}</span><h2>${escapeHtml(step.title)}</h2><p>${escapeHtml(step.text)}</p><div class="intro-tour-progress"><span style="width:${((index + 1) / steps.length) * 100}%"></span></div><div class="intro-tour-actions">${index ? '<button type="button" class="secondary-button" data-tour-back>Zurück</button>' : ''}<button type="button" class="primary-button" data-tour-next>${step.final ? (repeat ? 'Tour abschließen' : 'App-PIN einrichten') : 'Weiter'}</button></div></div>`;
+            app.append(layer);
+            layer.querySelector('[data-tour-back]')?.addEventListener('click', () => { index -= 1; draw(); });
+            layer.querySelector('[data-tour-next]').addEventListener('click', async event => {
+                if (!step.final) { index += 1; draw(); return; }
+                event.currentTarget.disabled = true;
+                try {
+                    await api('/api/intro-tour/complete', { method: 'POST' });
+                    clear();
+                    state.isIntroTourActive = false;
+                    if (repeat) {
+                        state.activeTab = 'system';
+                        renderSettings();
+                    } else renderAppPinSetup();
+                } catch (error) {
+                    event.currentTarget.disabled = false;
+                    showToast(error.message, true);
+                }
+            });
+        };
+        draw();
     }
 
     async function requestAdminAccess() {
@@ -1242,6 +1359,12 @@
         main.innerHTML = `<section class="settings-card system-hero"><header class="system-page-heading"><span class="system-heading-icon" aria-hidden="true">${icons.settings}</span><div><h1>System</h1><p>Hardware, Netzwerkzugriff und Software dieser Mixstation konfigurieren.</p></div></header><form id="system-form"><div class="system-config-grid"><section class="system-section system-hardware-section" aria-labelledby="system-hardware-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.raspberryPi}</span><div><h2 id="system-hardware-title">Hardware</h2><p>Lege fest, wie CocktailOS die angeschlossenen Pumpen ansteuert.</p></div></header><div class="system-choice-grid"><fieldset class="system-choice-group"><legend>Pumpentreiber</legend><label class="option-card system-option-card"><input type="radio" name="pumpDriver" value="Dummy" ${config.pumpDriver === 'Dummy' ? 'checked' : ''}><strong>Dummy</strong><span>Sicher testen, ohne GPIO-Ausgänge zu schalten.</span></label><label class="option-card system-option-card"><input type="radio" name="pumpDriver" value="Gpio" ${config.pumpDriver === 'Gpio' ? 'checked' : ''}><strong>Raspberry Pi GPIO</strong><span>Steuert reale Relais über System.Device.Gpio.</span></label></fieldset><fieldset class="system-choice-group"><legend>Pin-Nummerierung</legend><label class="option-card system-option-card"><input type="radio" name="pinNumberingScheme" value="Logical" ${config.pinNumberingScheme === 'Logical' ? 'checked' : ''}><strong>Logical / BCM</strong><span>GPIO-Nummern, beispielsweise GPIO17.</span></label><label class="option-card system-option-card"><input type="radio" name="pinNumberingScheme" value="Board" ${config.pinNumberingScheme === 'Board' ? 'checked' : ''}><strong>Board / physisch</strong><span>Positionen 1 bis 40 auf dem Raspberry-Pi-Header.</span></label></fieldset></div><p class="system-inline-note">Die Relaispolarität wird direkt für jede Pumpe festgelegt.</p></section><section class="system-section system-network-section" aria-labelledby="system-network-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.lock}</span><div><h2 id="system-network-title">Netzwerkzugriff</h2><p>Steuere CocktailOS von einem anderen Gerät im lokalen Netzwerk.</p></div></header><label class="option-card network-access-option system-network-toggle"><input type="checkbox" name="networkAccessEnabled" ${config.networkAccessEnabled ? 'checked' : ''}><span class="network-switch" aria-hidden="true"><span></span></span><strong>Fernzugriff aktivieren</strong><span>Der Zugang ist durch deinen vierstelligen App-PIN geschützt.</span></label><div class="network-access-note"><span>Nur in vertrauenswürdigen Netzwerken aktivieren.</span></div></section><section class="system-section system-update-section" aria-labelledby="application-update-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.download}</span><div><h2 id="application-update-title">Software</h2><p>Installierte Version und verfügbare Aktualisierungen.</p></div></header><div class="application-update-card"><div><span class="system-meta-label">Installierte Version</span><strong>v${escapeHtml(state.version || '–')}</strong></div><div class="application-update-status">${updateContent}</div></div></section></div><aside class="system-safety-note"><span aria-hidden="true">!</span><p>Bei active LOW bleibt der Ausgang im Ruhezustand HIGH und schaltet zum Pumpen auf LOW.</p></aside><footer class="system-form-footer"><p>Änderungen werden erst nach dem Speichern übernommen.</p><button class="primary-button" type="submit">Hardwarekonfiguration speichern</button></footer></form></section>`;
         const networkToggle = main.querySelector('[name="networkAccessEnabled"]');
         const form = main.querySelector('#system-form');
+        const repeatTourButton = document.createElement('button');
+        repeatTourButton.type = 'button';
+        repeatTourButton.className = 'secondary-button repeat-intro-tour';
+        repeatTourButton.innerHTML = `${icons.tour}<span>Tour wiederholen</span>`;
+        repeatTourButton.addEventListener('click', () => renderGuidedUiTour({ repeat: true }));
+        main.querySelector('.system-update-section').append(repeatTourButton);
         const bindUpdateControls = () => {
             main.querySelector('[data-app-update]')?.addEventListener('click', openApplicationUpdateDialog);
             main.querySelector('[data-app-update-check]')?.addEventListener('click', async event => {
@@ -1527,7 +1650,7 @@
         const headingIcon = options.headingIcon ? `<span class="settings-dialog-heading-icon" aria-hidden="true">${options.headingIcon}</span>` : '';
         layer.querySelector('.settings-dialog-content').innerHTML = `<header class="settings-dialog-header"><div class="settings-dialog-heading">${headingIcon}<div><h2 id="settings-dialog-title">${escapeHtml(title)}</h2>${intro ? `<p>${escapeHtml(intro)}</p>` : ''}</div></div>${closeButton}</header><div class="settings-dialog-body">${body}</div>`;
         layer.querySelectorAll('[data-dialog-close]').forEach(button => button.addEventListener('click', () => dismissSettingsDialog(layer)));
-        if (!layer.dataset.focused) {
+        if (!layer.dataset.focused && !state.isIntroTourActive) {
             layer.dataset.focused = 'true';
             requestAnimationFrame(() => (layer.querySelector('.settings-dialog-body input, .settings-dialog-body select, .settings-dialog-body textarea') || layer.querySelector('button'))?.focus());
         }

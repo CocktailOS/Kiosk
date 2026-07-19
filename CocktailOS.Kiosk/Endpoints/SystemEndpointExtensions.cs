@@ -20,6 +20,8 @@ public static class SystemEndpointExtensions
         api.MapPut("/system/theme", UpdateThemeAsync);
         api.MapGet("/network-access/status", GetNetworkAccessStatusAsync);
         api.MapPost("/network-access/authenticate", AuthenticateNetworkAccessAsync);
+        api.MapGet("/intro-tour/status", GetIntroTourStatusAsync);
+        api.MapPost("/intro-tour/complete", CompleteIntroTourAsync);
         api.MapGet("/admin-access/status", GetAdminAccessStatusAsync);
         api.MapPost("/admin-access/setup", SetupAdminAccessAsync);
         api.MapPost("/admin-access/authenticate", AuthenticateAdminAccessAsync);
@@ -157,6 +159,21 @@ public static class SystemEndpointExtensions
         return Results.Ok(new AdminAccessStatusResponse(
             !string.IsNullOrWhiteSpace(configuration.NetworkAccessPinHash),
             sessions.IsValid(context.Request.Cookies["CocktailOS.AdminAccess"])));
+    }
+
+    private static async Task<IResult> GetIntroTourStatusAsync(AppDbContext db, CancellationToken ct)
+    {
+        var configuration = await db.MachineConfigurations.AsNoTracking()
+            .SingleAsync(x => x.Id == MachineConfiguration.SingletonId, ct);
+        return Results.Ok(new IntroTourStatusResponse(configuration.IntroTourCompleted));
+    }
+
+    private static async Task<IResult> CompleteIntroTourAsync(AppDbContext db, CancellationToken ct)
+    {
+        var configuration = await db.MachineConfigurations.SingleAsync(x => x.Id == MachineConfiguration.SingletonId, ct);
+        configuration.IntroTourCompleted = true;
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> SetupAdminAccessAsync(HttpContext context, NetworkPinRequest request,

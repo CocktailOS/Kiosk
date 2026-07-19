@@ -79,6 +79,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.Theme).HasMaxLength(10).IsRequired();
             entity.Property(x => x.NetworkAccessEnabled).HasDefaultValue(false);
             entity.Property(x => x.NetworkAccessPinHash).HasMaxLength(200);
+            entity.Property(x => x.IntroTourCompleted).HasDefaultValue(false);
         });
     }
 }

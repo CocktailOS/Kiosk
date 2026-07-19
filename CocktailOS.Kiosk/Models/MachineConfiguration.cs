@@ -9,4 +9,5 @@ public sealed class MachineConfiguration
     public required string Theme { get; set; } = ThemeNames.Dark;
     public bool NetworkAccessEnabled { get; set; }
     public string? NetworkAccessPinHash { get; set; }
+    public bool IntroTourCompleted { get; set; }
 }

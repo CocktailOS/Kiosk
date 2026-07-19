@@ -139,6 +139,11 @@ namespace CocktailOS.Kiosk.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("IntroTourCompleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("NetworkAccessPinHash")
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");

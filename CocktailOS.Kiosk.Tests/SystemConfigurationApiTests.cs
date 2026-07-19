@@ -10,6 +10,22 @@ namespace CocktailOS.Kiosk.Tests;
 public sealed class SystemConfigurationApiTests
 {
     [Fact]
+    public async Task IntroTour_IsCompletedOnlyAfterTheExplicitCompletionRequest()
+    {
+        using var factory = new KioskApplicationFactory();
+        using var client = factory.CreateClient();
+
+        var initial = await client.GetFromJsonAsync<IntroTourStatusResponse>("/api/intro-tour/status");
+        Assert.False(initial?.Completed);
+
+        var completion = await client.PostAsync("/api/intro-tour/complete", null);
+        completion.EnsureSuccessStatusCode();
+
+        var completed = await client.GetFromJsonAsync<IntroTourStatusResponse>("/api/intro-tour/status");
+        Assert.True(completed?.Completed);
+    }
+
+    [Fact]
     public async Task NetworkRequests_AreBlockedUntilNetworkAccessIsEnabled()
     {
         using var factory = new KioskApplicationFactory();
