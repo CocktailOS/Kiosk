@@ -28,6 +28,9 @@
     let virtualKeyboardTarget = null;
     let virtualKeyboardShift = false;
     let virtualKeyboardDrag = null;
+    let virtualKeyboardTouchFocusTarget = null;
+    let virtualKeyboardTouchActivationPending = false;
+    let virtualKeyboardTouchActivationTimer = null;
 
     const icons = {
         sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>',
@@ -1420,12 +1423,25 @@
             if (virtualKeyboardTarget && !virtualKeyboardTarget.isConnected) hideVirtualKeyboard();
         }).observe(app, { childList: true, subtree: true });
 
-        document.addEventListener('focusin', event => {
-            if (isVirtualKeyboardInput(event.target)) showVirtualKeyboard(event.target);
-        });
         document.addEventListener('pointerdown', event => {
+            const touchInteraction = isTouchKeyboardPointer(event);
+            if (touchInteraction) armVirtualKeyboardTouchActivation();
+            virtualKeyboardTouchFocusTarget = touchInteraction && isVirtualKeyboardInput(event.target)
+                ? event.target
+                : null;
             if (!virtualKeyboardTarget || virtualKeyboard.contains(event.target) || event.target === virtualKeyboardTarget) return;
             hideVirtualKeyboard();
+        }, true);
+        document.addEventListener('focusin', event => {
+            const isKeyboardInput = isVirtualKeyboardInput(event.target);
+            const shouldShowKeyboard = isKeyboardInput && (virtualKeyboardTouchFocusTarget === event.target || virtualKeyboardTouchActivationPending);
+            if (shouldShowKeyboard) {
+                showVirtualKeyboard(event.target);
+                clearVirtualKeyboardTouchActivation();
+            } else if (virtualKeyboardTarget && !virtualKeyboard.hidden && event.target.matches?.('[data-pin-digit]')) {
+                virtualKeyboardTarget = event.target;
+            }
+            virtualKeyboardTouchFocusTarget = null;
         });
         virtualKeyboard.addEventListener('pointerdown', event => {
             const dragHandle = event.target.closest('[data-virtual-keyboard-drag]');
@@ -1463,6 +1479,25 @@
             if (!button || !virtualKeyboardTarget) return;
             applyVirtualKey(button.dataset.virtualKey);
         });
+    }
+
+    function isTouchKeyboardPointer(event) {
+        if (event.pointerType === 'touch' || event.sourceCapabilities?.firesTouchEvents) return true;
+        return event.pointerType === 'mouse'
+            && navigator.maxTouchPoints > 0
+            && window.matchMedia('(pointer: coarse)').matches;
+    }
+
+    function armVirtualKeyboardTouchActivation() {
+        virtualKeyboardTouchActivationPending = true;
+        clearTimeout(virtualKeyboardTouchActivationTimer);
+        virtualKeyboardTouchActivationTimer = setTimeout(clearVirtualKeyboardTouchActivation, 1000);
+    }
+
+    function clearVirtualKeyboardTouchActivation() {
+        virtualKeyboardTouchActivationPending = false;
+        clearTimeout(virtualKeyboardTouchActivationTimer);
+        virtualKeyboardTouchActivationTimer = null;
     }
 
     function isVirtualKeyboardInput(element) {
