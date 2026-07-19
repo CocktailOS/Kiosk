@@ -41,24 +41,37 @@ show_banner() {
   supports_terminal_ui && clear
   printf '\n'
   printf '\033[1;38;5;141m'
-  printf '   ____            _    _        _ _  ___  ____\n'
-  printf '  / ___|___   ___| | _| |_ __ _(_) |/ _ \/ ___|\n'
-  printf ' | |   / _ \\ / __| |/ / __/ _` | | | | | \___ \\\n'
-  printf ' | |__| (_) | (__|   <| || (_| | | | |_| |___) |\n'
-  printf '  \\____\\___/ \\___|_|\\_\\__\\__,_|_|_|\\___/|____/\n'
+  cat <<'BANNER'
+   ____           _    _        _ _  ___  ____
+  / ___|___   ___| | _| |_ __ _(_) |/ _ \/ ___|
+ | |   / _ \ / __| |/ / __/ _` | | | | | \___ \
+ | |__| (_) | (__|   <| || (_| | | | |_| |___) |
+  \____\___/ \___|_|\_\__\__,_|_|_|\___/|____/
+BANNER
   printf '\033[0m'
   printf '\033[38;5;183m              Mixstation-Installer\033[0m\n\n'
-  printf '                 .-=========-.\n'
-  printf "                 \\'-=======-' /\n"
-  printf '                  _|   .-.   |_\n'
-  printf '                 ((|  (   )  |))\n'
-  printf '                  \\|   `-`   |//\n'
-  printf '                   \\         //\n'
-  printf '                    `\\       /`\n'
-  printf '                      `-._.-`\n\n'
+  printf '\033[38;5;141m'
+  cat <<'GLASS'
+                 .-=======-.
+                 \  * * *  /
+                  \-------/
+                   \     /
+                    \   /
+                     \ /
+                      V
+                      |
+                    __|__
+GLASS
+  printf '\033[0m\n'
 }
 
-log() { printf '  %s\n' "$*"; }
+log() {
+  if supports_terminal_ui; then
+    printf '  \033[38;5;141m•\033[0m  %s\n' "$*"
+  else
+    printf '  ... %s\n' "$*"
+  fi
+}
 fail() { printf '\n[cocktailos-kiosk] FEHLER: %s\n' "$*" >&2; exit 1; }
 
 run_step() {
@@ -613,6 +626,9 @@ KIOSK_SERVICE_NAME="${SERVICE_NAME}-cage"
 KIOSK_SERVICE_FILE="/etc/systemd/system/${KIOSK_SERVICE_NAME}.service"
 KIOSK_SCRIPT="/usr/local/lib/cocktailos-kiosk/cage-session"
 STARTUP_SPLASH_PATH="/usr/local/share/cocktailos-kiosk/startup.html"
+BOOT_SPLASH_SERVICE_NAME="${SERVICE_NAME}-boot-splash"
+BOOT_SPLASH_SERVICE_FILE="/etc/systemd/system/${BOOT_SPLASH_SERVICE_NAME}.service"
+BOOT_SPLASH_SCRIPT="/usr/local/lib/cocktailos-kiosk/boot-splash"
 LEGACY_DISPLAY_SERVICE_NAME="${SERVICE_NAME}-display"
 LEGACY_DISPLAY_SERVICE_FILE="/etc/systemd/system/${LEGACY_DISPLAY_SERVICE_NAME}.service"
 if [[ "$MODE" == "display" ]]; then
@@ -718,6 +734,65 @@ SPLASH
   sed -i "s/__PORT__/${PORT}/g" "$STARTUP_SPLASH_PATH"
   chmod 0644 "$STARTUP_SPLASH_PATH"
   chown root:root "$STARTUP_SPLASH_PATH"
+  cat > "$BOOT_SPLASH_SCRIPT" <<'BOOT_SPLASH'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+tty=/dev/tty1
+trap 'printf "\033[?25h\n" > "$tty"' EXIT
+printf '\033[2J\033[H\033[?25l\033[35m' > "$tty"
+cat > "$tty" <<'BANNER'
+
+   ____           _    _        _ _  ___  ____
+  / ___|___   ___| | _| |_ __ _(_) |/ _ \/ ___|
+ | |   / _ \ / __| |/ / __/ _` | | | | | \___ \
+ | |__| (_) | (__|   <| || (_| | | | |_| |___) |
+  \____\___/ \___|_|\_\__\__,_|_|_|\___/|____/
+
+                    Mixstation
+
+BANNER
+printf '\033[0m' > "$tty"
+
+frames=('|' '/' '-' '\\')
+frame=0
+while true; do
+  if /usr/bin/curl --fail --silent --connect-timeout 1 --max-time 2 --output /dev/null "http://127.0.0.1:__PORT__/"; then
+    printf '\r\033[2K  \033[32m✓\033[0m  CocktailOS ist bereit. Oberfläche wird geladen …\n' > "$tty"
+    sleep .2
+    exit 0
+  fi
+
+  printf '\r\033[2K  \033[35m%s\033[0m  CocktailOS wird gestartet …' "${frames[$frame]}" > "$tty"
+  frame=$(((frame + 1) % ${#frames[@]}))
+  sleep .15
+done
+BOOT_SPLASH
+  sed -i "s/__PORT__/${PORT}/g" "$BOOT_SPLASH_SCRIPT"
+  chmod 0755 "$BOOT_SPLASH_SCRIPT"
+  chown root:root "$BOOT_SPLASH_SCRIPT"
+  cat > "$BOOT_SPLASH_SERVICE_FILE" <<BOOT_SPLASH_SERVICE
+[Unit]
+Description=CocktailOS boot splash
+After=local-fs.target systemd-vconsole-setup.service
+Before=${KIOSK_SERVICE_NAME}.service
+Wants=${SERVICE_NAME}.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=${BOOT_SPLASH_SCRIPT}
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+
+[Install]
+WantedBy=multi-user.target
+BOOT_SPLASH_SERVICE
   if [[ -f /etc/X11/Xwrapper.config ]] && grep -q 'Managed by CocktailOS Kiosk install.sh.' /etc/X11/Xwrapper.config; then
     rm -f /etc/X11/Xwrapper.config
   fi
@@ -777,8 +852,8 @@ KIOSK
   cat > "$KIOSK_SERVICE_FILE" <<KIOSK_SERVICE
 [Unit]
 Description=CocktailOS Kiosk on Cage
-After=systemd-user-sessions.service
-Wants=${SERVICE_NAME}.service
+After=${BOOT_SPLASH_SERVICE_NAME}.service systemd-user-sessions.service
+Wants=${SERVICE_NAME}.service ${BOOT_SPLASH_SERVICE_NAME}.service
 Conflicts=display-manager.service getty@tty1.service
 
 [Service]
@@ -802,6 +877,7 @@ WantedBy=multi-user.target
 KIOSK_SERVICE
 else
   rm -f "$KIOSK_SERVICE_FILE"
+  rm -f "$BOOT_SPLASH_SERVICE_FILE"
 fi
 rm -f "$LEGACY_DISPLAY_SERVICE_FILE"
 
@@ -811,8 +887,10 @@ if [[ "$MODE" == "display" ]]; then
   systemctl disable --now display-manager.service 2>/dev/null || true
   systemctl stop "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
   systemctl disable --now "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
+  run_step "Aktiviere CocktailOS-Startscreen" systemctl enable "$BOOT_SPLASH_SERVICE_NAME"
   run_step "Starte die Kiosk-Oberfläche" systemctl enable --now "$KIOSK_SERVICE_NAME"
 else
+  systemctl disable --now "$BOOT_SPLASH_SERVICE_NAME" 2>/dev/null || true
   systemctl disable --now "$KIOSK_SERVICE_NAME" 2>/dev/null || true
   systemctl stop "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
   systemctl disable --now "$LEGACY_DISPLAY_SERVICE_NAME" 2>/dev/null || true
