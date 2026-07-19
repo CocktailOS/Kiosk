@@ -1,49 +1,146 @@
 # CocktailOS Kiosk
 
-CocktailOS Kiosk ist eine .NET-10-Minimal-API mit einer für einen 7-Zoll-Touchscreen (1024 × 600) optimierten Oberfläche. Die Anwendung verwaltet Cocktails, Zutaten, Größen und Pumpen und steuert den Ausschank über einen sicheren Dummy- oder Raspberry-Pi-GPIO-Treiber.
+> **Direkt auf dem Raspberry Pi installieren**
 
-![Startseite mit Cocktailauswahl](docs/screenshots/startseite.png)
+```bash
+curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash
+```
 
-## Funktionen
+CocktailOS Kiosk ist eine lokale Cocktail-Mixstation für Raspberry Pi und 7-Zoll-Touchdisplays (1024 × 600). Sie verwaltet Rezepte, Zutaten, Pumpen und Bestände, steuert den Ausschank und bleibt im normalen Betrieb vollständig ohne Internet nutzbar.
 
-- Cocktailauswahl mit Bildern, Größen und proportional skalierbaren Rezepten
-- Animierter Ausschank mit Fortschritt, Stopp-Schaltfläche und Erfolgsrückmeldung
-- Reinigungsmodus für frei wählbare aktive Pumpen mit einstellbarer Laufzeit und Sofort-Stopp
-- Vorbereitungsmodus direkt pro Pumpe zum Befüllen der Schläuche: Taste gedrückt halten, beim Loslassen sofort stoppen
-- Geführte Pumpenkalibrierung mit optionalem Vorfüllen, sicherem 10-Sekunden-Messlauf und bis zu drei Kontrollmessungen
-- Vorratsverwaltung mit Flaschengröße, Restmenge, Auffüllen-Aktion und Warnung bei niedrigem Bestand
-- Größenabhängige Cocktail-Verfügbarkeit; nicht ausreichende Bestände blockieren den Ausschank
-- Automatischer Bestandsabzug nach vollständigem Ausschank und anteilig anhand der realen Pumpenlaufzeit bei Abbruch
-- Verwaltung von Cocktails, Zutaten, Pumpen, Größen und Systemkonfiguration in Dialogen
-- Bis zu acht parallele Pumpen
-- Je Pumpe konfigurierbare GPIO-Nummer, Förderrate und active-HIGH-/active-LOW-Relaislogik
-- Dummy-Treiber zum sicheren Testen ohne angeschlossene Hardware
-- SQLite-Datenbank mit Entity Framework Core und automatischen Migrationen beim Start
-- Bild-Upload für Cocktails; Dateien werden lokal auf dem Gerät gespeichert
-- Vanilla JavaScript, CSS und lokal eingebundenes GSAP – kein Node.js und kein Internetzugang im Betrieb nötig
+![Cocktailauswahl auf dem Touchscreen](docs/screenshots/startseite.jpg)
+
+## Auf einen Blick
+
+- Touch-optimierte Oberfläche für Cocktailauswahl, Größe und Ausschank
+- Bis zu acht parallel steuerbare Pumpen – im sicheren Dummy-Modus oder über Raspberry-Pi-GPIO
+- Automatischer Bestandsabzug, Auffüllen und Verfügbarkeitsprüfung vor dem Mixen
+- Geführte Ersteinrichtung inklusive interaktiver Tour durch die komplette Oberfläche
+- Vierstelliger App-PIN für die Adminansicht; derselbe PIN schützt optional auch den Netzwerkzugriff
+- Lokale Datensicherung und Wiederherstellung als ZIP-Datei – auch ohne Internet
+- Release-Updates direkt aus der Systemansicht oder über das Installationsskript
 
 ## Screenshots
 
-### Startseite
+Jeder Screenshot zeigt links den Light Mode und rechts den Dark Mode.
 
-Die Startseite zeigt bis zu sechs Cocktails in zwei Reihen. Weitere Cocktails lassen sich horizontal erreichen. Über das Zahnrad in der Kopfzeile öffnen sich die Einstellungen.
+| Cocktail auswählen | Größe wählen und starten |
+| --- | --- |
+| ![Startseite](docs/screenshots/startseite.jpg) | ![Cocktaildialog mit Größenwahl](docs/screenshots/cocktail-dialog.jpg) |
 
-![Cocktail-Auswahl auf dem Touchscreen](docs/screenshots/startseite.png)
+Die Pumpenverwaltung bündelt GPIO-Zuordnung, Kalibrierung, Schlauchfüllung und Reinigungsmodus in einer Ansicht.
 
-### Pumpenverwaltung
+![Pumpenverwaltung](docs/screenshots/pumpenverwaltung.jpg)
 
-Die Pumpenverwaltung zeigt Status, GPIO-Pin, Förderrate und zugeordnete Zutat auf einen Blick. Reinigungsmodus und das Füllen der Schläuche sind direkt erreichbar.
+## Installation auf dem Raspberry Pi
 
-![Pumpenverwaltung](docs/screenshots/einstellungen-pumpen.png)
+Das Installationsskript lädt die passende ARM64-Release, prüft deren Prüfsumme, richtet systemd ein und bewahrt bei späteren Updates Datenbank sowie hochgeladene Bilder. Im Display-Modus installiert es außerdem Cage und Chromium für den Kiosk-Betrieb und konfiguriert 1024 × 600 HDMI.
 
-## Voraussetzungen
+### Mit angeschlossenem Display
 
-- .NET SDK 10
-- Für echten GPIO-Betrieb: Raspberry Pi mit unterstütztem Linux-System, Relaisboard und korrekt abgesicherter Pumpenstromversorgung
+```bash
+curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash
+sudo reboot
+```
 
-> Die Relais und Pumpen dürfen nicht direkt über GPIO-Pins versorgt werden. GPIO dient ausschließlich als Steuersignal für ein geeignetes Relais- oder Treibermodul.
+Nach dem Neustart startet CocktailOS automatisch auf dem angeschlossenen Display. Der Zugriff aus dem lokalen Netzwerk ist zunächst deaktiviert.
 
-## Lokal starten
+### Headless oder über das Netzwerk
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --headless --network-pin 1234
+```
+
+Ersetze `1234` durch einen eigenen vierstelligen PIN. Im Headless-Modus ist der Netzwerkzugriff aktiv und die Anwendung anschließend unter `http://<IP-des-Pi>:5149` erreichbar. Der PIN wird als Hash gespeichert und ist zugleich der App-PIN für die Adminansicht.
+
+Weitere Optionen:
+
+```text
+--tag TAG     Bestimmte Release-Version installieren
+--stable      Vorabversionen bei der Auswahl ignorieren
+--headless    Ohne Display installieren
+```
+
+## Funktionen
+
+### Cocktails und Ausschank
+
+- Cocktailkarten mit Bild, Beschreibung, Zutaten und verfügbaren Größen
+- Mengen werden für die gewählte Größe proportional berechnet
+- Animierter Ausschank mit Fortschritt, sicherem Sofort-Stopp und Rückmeldung
+- Mehrere Pumpen können gleichzeitig laufen; bei Fehler oder Abbruch werden alle Ausgänge sicher abgeschaltet
+- Nicht verfügbare Zutaten oder zu geringe Bestände blockieren den Start
+
+### Zutaten und Bestand
+
+- Zutaten mit Flaschengröße, Restmenge und Warnung bei niedrigem Bestand
+- Bestände werden nach erfolgreichem Ausschank automatisch reduziert
+- Bei Abbruch wird der Verbrauch anhand der tatsächlichen Laufzeit anteilig abgezogen
+- Auffüllen direkt in der Zutatenverwaltung
+
+### Pumpen und Hardware
+
+- Bis zu acht Pumpen mit GPIO-Pin, Förderrate, Zutat und aktivem Status
+- Dummy-Treiber zum sicheren Einrichten und Testen ohne angeschlossene Hardware
+- Raspberry-Pi-GPIO-Treiber über `System.Device.Gpio`
+- Pro Pumpe einstellbare Relaispolarität (active HIGH oder active LOW)
+- Kalibrierassistent mit Messlauf und Kontrollmessungen
+- Schlauchfüllung per Gedrückthalten sowie Reinigungsmodus mit Laufzeit und Sofort-Stopp
+
+### Administration und Betrieb
+
+- Geführte Intro-Tour beim ersten Start: Startseite, Cocktails, Zutaten, Pumpen, Größen und System werden direkt in der echten UI erklärt
+- Nach der Tour wird ein vierstelliger App-PIN festgelegt
+- Die PIN-Abfrage erscheint bei jedem Öffnen der Adminansicht; während der Tour sind nur die vorgesehenen Schritte bedienbar
+- Einstellungen werden automatisch gespeichert
+- Optionaler Netzwerkzugriff im vertrauenswürdigen lokalen Netz, geschützt durch denselben PIN
+- Installierte Version, Update-Prüfung und Tour-Wiederholung in der Systemansicht
+
+### Backup und Wiederherstellung
+
+- Backup als ZIP mit SQLite-Datenbank und allen hochgeladenen Cocktailbildern
+- Wiederherstellung direkt aus der Systemansicht
+- Vor dem Wiederherstellen wird der aktuelle Stand als Sicherheitskopie abgelegt
+- Kein Cloud-Konto und kein Internetzugang nötig: Die ZIP-Datei kann z. B. über den Browser vom Pi heruntergeladen oder auf einen USB-Stick kopiert werden
+
+## Erster Start
+
+1. Die Intro-Tour führt durch die Bedienung und die wichtigsten Verwaltungsfunktionen.
+2. Nach Abschluss wird ein vierstelliger App-PIN vergeben.
+3. In **Einstellungen** Cocktails, Zutaten, Pumpen und Größen einrichten.
+4. Für echte Hardware unter **System** von **Dummy** auf **Raspberry Pi GPIO** umstellen.
+5. Pumpen kalibrieren, Schläuche füllen und anschließend einen Cocktail auswählen.
+
+## Datensicherung vom Pi holen
+
+Öffne auf einem Gerät im selben Netzwerk `http://<IP-des-Pi>:5149`, entsperre die Adminansicht und gehe zu **System → Datensicherung**. Mit **Backup herunterladen** erhältst du eine ZIP-Datei mit Datenbank und Bildern.
+
+Alternativ lässt sich die Datei bei einem lokalen Bildschirm direkt über den Browser herunterladen und anschließend auf einen USB-Stick kopieren. Für die Wiederherstellung wird dieselbe ZIP-Datei über **Backup wiederherstellen** ausgewählt.
+
+## Hardware und Sicherheit
+
+> GPIO-Pins dürfen Pumpen oder Relais niemals direkt mit Strom versorgen. GPIO ist ausschließlich das Steuersignal für ein geeignetes Relais- oder Treibermodul. Plane eine ausreichend dimensionierte, separat abgesicherte Spannungsversorgung für die Pumpen ein.
+
+| Treiber | Einsatz |
+| --- | --- |
+| **Dummy** | Simuliert Schaltvorgänge. Ideal für Entwicklung, UI-Test und Einrichtung ohne Hardware. |
+| **Raspberry Pi GPIO** | Steuert Relais über `System.Device.Gpio` auf dem Raspberry Pi. |
+
+Bei Stopp, Abbruch und Fehlern setzt CocktailOS alle geöffneten Pumpenausgänge in den inaktiven Zustand.
+
+## Daten, Updates und Offline-Betrieb
+
+| Inhalt | Standardort auf dem Pi |
+| --- | --- |
+| SQLite-Datenbank | `/var/lib/cocktailos-kiosk/data/cocktailos.db` |
+| Hochgeladene Bilder | `/var/lib/cocktailos-kiosk/uploads/` |
+| Releases | `/opt/cocktailos-kiosk/releases/` |
+
+Der tägliche Betrieb, die UI, die PIN-Prüfung und Backups funktionieren ohne Internetzugang. Nur Installation, Update-Prüfung und Download einer neuen Release benötigen Zugriff auf GitHub.
+
+## Lokal entwickeln
+
+Voraussetzung: .NET SDK 10.
 
 ```powershell
 dotnet tool restore
@@ -51,132 +148,25 @@ dotnet restore
 dotnet run --project CocktailOS.Kiosk/CocktailOS.Kiosk.csproj
 ```
 
-Die Anwendung ist anschließend standardmäßig unter `http://localhost:5276` erreichbar. Beim ersten Start werden die EF-Core-Migrationen angewendet und Demo-Daten erzeugt.
+Die Anwendung ist anschließend standardmäßig unter `http://localhost:5276` erreichbar. Beim ersten Start werden Migrationen angewendet und Demo-Daten angelegt.
 
-## Installation auf dem Raspberry Pi
+### Prüfen und bauen
 
-Das Installationsskript lädt die aktuelle ARM64-Release, prüft deren Prüfsumme, richtet den systemd-Dienst ein und erhält bei Updates die SQLite-Datenbank sowie hochgeladene Bilder. Für den Displaybetrieb wird der Bildschirm auf 1024 × 600 konfiguriert. Nach der ersten Installation ist ein Neustart erforderlich.
-
-### Standardinstallation mit Display
-
-Ohne Option startet CocktailOS über Cage und Chromium auf dem angeschlossenen Bildschirm. Der Zugriff aus dem Netzwerk ist standardmäßig deaktiviert und kann später unter **Einstellungen → System → Netzwerkzugriff** aktiviert werden.
-
-Für die normale Installation mit angeschlossenem Display genügt dieser Befehl:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash
+```powershell
+dotnet test CocktailOS.Kiosk.slnx -c Release --no-restore
+dotnet build CocktailOS.Kiosk/CocktailOS.Kiosk.csproj -c Release
 ```
 
-Nach einer Installation mit Display bitte einmal neu starten:
-
-```bash
-sudo reboot
-```
-
-### Ohne angeschlossenes Display
-
-Startet ausschließlich die API. Der Netzwerkzugriff ist dabei direkt aktiviert und durch einen selbst gewählten vierstelligen PIN geschützt. Der PIN wird beim ersten Start als Hash in der Datenbank hinterlegt; bei Updates bleiben die bestehende Konfiguration und der PIN unverändert.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/CocktailOS/Kiosk/main/install.sh | sudo bash -s -- --headless --network-pin 1234
-```
-
-Anschließend ist CocktailOS über `http://<IP-des-Pi>:5149` erreichbar. Verwende statt `1234` einen eigenen PIN.
-
-## Daten und Bilder
-
-| Inhalt | Speicherort |
-| --- | --- |
-| SQLite-Datenbank | `CocktailOS.Kiosk/data/cocktailos.db` |
-| Hochgeladene Cocktailbilder | `CocktailOS.Kiosk/wwwroot/uploads/` |
-| Statische Beispielbilder | `CocktailOS.Kiosk/wwwroot/assets/` |
-
-Die Datenbankverbindung ist in [`appsettings.json`](CocktailOS.Kiosk/appsettings.json) konfigurierbar:
-
-```json
-{
-  "ConnectionStrings": {
-    "CocktailOs": "Data Source=data/cocktailos.db"
-  }
-}
-```
-
-## Bedienung
-
-1. Auf der Startseite einen Cocktail wählen.
-2. Im Dialog die gewünschte Größe auswählen.
-3. Zutatenverhältnis prüfen und den Ausschank starten.
-4. Während des Ausschanks kann jederzeit gestoppt werden.
-5. Über das Zahnrad die Verwaltung und Hardwareeinstellungen öffnen.
-
-Die Zutatenmengen eines Rezepts beziehen sich auf die hinterlegte Standardgröße. Beim Ausschank skaliert die API jede Menge auf die gewählte Zielgröße.
-
-## Hardware und Sicherheit
-
-Unter **Einstellungen → System** wird der gewünschte Pumpentreiber ausgewählt:
-
-| Treiber | Zweck |
-| --- | --- |
-| `Dummy` | Simuliert Pumpen und protokolliert Schaltvorgänge. Ideal für Entwicklung und Kalibrierung ohne Hardware. |
-| `Gpio` | Schaltet GPIO-Ausgänge über `System.Device.Gpio` auf dem Raspberry Pi. |
-
-Für jede Pumpe werden GPIO-Pin, Förderrate in ml/s, zugeordnete Zutat sowie die Relaispolarität festgelegt. Active HIGH bedeutet: Das Relais wird mit einem HIGH-Signal eingeschaltet. Bei active LOW ist die Logik umgekehrt.
-
-Beim Stopp, bei einer abgebrochenen Ausgabe und bei Fehlern werden alle geöffneten Pumpenausgänge in den inaktiven Zustand gesetzt. Schlägt ein Pumpenschritt fehl, wird der parallele Ausschank sofort abgebrochen.
-
-## API-Übersicht
-
-Alle Routen beginnen mit `/api`.
-
-| Bereich | Routen |
-| --- | --- |
-| Cocktails | `GET /cocktails`, `GET /cocktails/{id}`, `POST /cocktails`, `PUT /cocktails/{id}`, `DELETE /cocktails/{id}` |
-| Zutaten | `GET /ingredients`, `POST /ingredients`, `PUT /ingredients/{id}`, `DELETE /ingredients/{id}`, `POST /ingredients/{id}/refill` |
-| Pumpen | `GET /pumps`, `POST /pumps`, `PUT /pumps/{id}`, `DELETE /pumps/{id}` |
-| Größen | `GET /sizes`, `POST /sizes`, `PUT /sizes/{id}`, `DELETE /sizes/{id}` |
-| System | `GET /system`, `PUT /system` |
-| Bilder | `POST /images` – JPG, PNG, WebP oder GIF bis 5 MB |
-| Ausschank | `POST /dispenses`, `GET /dispenses/current`, `POST /dispenses/current/stop` |
-| Reinigung | `POST /cleaning`, `GET /cleaning/current`, `POST /cleaning/current/stop` |
-| Vorbereitung | `POST /priming`, `GET /priming/current`, `POST /priming/current/stop` |
-| Kalibrierung | `POST /calibrations`, `GET /calibrations/current`, `POST /calibrations/current/stop`, `PUT /pumps/{id}/calibration` |
-
-Beispiel für einen Ausschank:
-
-```http
-POST /api/dispenses
-Content-Type: application/json
-
-{
-  "cocktailId": 1,
-  "sizeId": 2
-}
-```
-
-Im Development-Modus steht die OpenAPI-Beschreibung unter `/openapi/v1.json` bereit.
+Im Development-Modus ist die OpenAPI-Beschreibung unter `/openapi/v1.json` verfügbar.
 
 ## Projektstruktur
 
 ```text
 CocktailOS.Kiosk/
-├── Contracts/       API-Request- und Response-Modelle
-├── Data/            EF-Core-Kontext, Migrationen und Demo-Daten
-├── Endpoints/       Minimal-API-Routen und Validierung
-├── Models/          Datenbankentitäten
-├── Services/        Ausschanklogik sowie Dummy- und GPIO-Pumpentreiber
-└── wwwroot/         Kiosk-Oberfläche, GSAP, Bilder und Uploads
-```
-
-## Prüfen und bauen
-
-```powershell
-dotnet build CocktailOS.Kiosk/CocktailOS.Kiosk.csproj -c Release
-```
-
-Für Änderungen am Datenmodell stehen die lokalen EF-Tools bereit:
-
-```powershell
-dotnet tool restore
-dotnet ef migrations add <Name> --project CocktailOS.Kiosk/CocktailOS.Kiosk.csproj
-dotnet ef database update --project CocktailOS.Kiosk/CocktailOS.Kiosk.csproj
+├── Contracts/    API-Request- und Response-Modelle
+├── Data/         EF-Core-Kontext, Migrationen und Demo-Daten
+├── Endpoints/    Minimal-API-Routen und Validierung
+├── Models/       Datenbankentitäten
+├── Services/     Ausschank, Backup sowie Dummy- und GPIO-Treiber
+└── wwwroot/      Kiosk-Oberfläche, lokale Assets und Uploads
 ```
