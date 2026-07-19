@@ -14,6 +14,7 @@ public sealed class SystemConfigurationApiTests
     {
         using var factory = new KioskApplicationFactory();
         using var client = factory.CreateClient();
+        await SetupAdminPinAsync(client);
 
         var denied = await factory.Server.SendAsync(context =>
         {
@@ -26,7 +27,7 @@ public sealed class SystemConfigurationApiTests
         var configuration = (await client.GetFromJsonAsync<MachineConfigurationResponse>("/api/system"))!;
         var update = await client.PutAsJsonAsync(
             "/api/system",
-            new MachineConfigurationRequest(configuration.PumpDriver, configuration.PinNumberingScheme, configuration.Theme, true, "1234"));
+            new MachineConfigurationRequest(configuration.PumpDriver, configuration.PinNumberingScheme, configuration.Theme, true, null));
         update.EnsureSuccessStatusCode();
 
         var tokens = await factory.Server.SendAsync(context =>
@@ -51,6 +52,7 @@ public sealed class SystemConfigurationApiTests
     {
         using var factory = new KioskApplicationFactory();
         using var client = factory.CreateClient();
+        await SetupAdminPinAsync(client);
 
         var initial = await client.GetFromJsonAsync<MachineConfigurationResponse>("/api/system");
         Assert.NotNull(initial);
@@ -58,7 +60,7 @@ public sealed class SystemConfigurationApiTests
 
         var enabledResponse = await client.PutAsJsonAsync(
             "/api/system",
-            new MachineConfigurationRequest(initial.PumpDriver, initial.PinNumberingScheme, initial.Theme, true, "1234"));
+            new MachineConfigurationRequest(initial.PumpDriver, initial.PinNumberingScheme, initial.Theme, true, null));
         enabledResponse.EnsureSuccessStatusCode();
         var enabled = await enabledResponse.Content.ReadFromJsonAsync<MachineConfigurationResponse>();
 
@@ -75,7 +77,7 @@ public sealed class SystemConfigurationApiTests
     }
 
     [Fact]
-    public async Task NetworkAccess_CannotBeEnabledWithoutPin()
+    public async Task NetworkAccess_CannotBeEnabledBeforeAppPinIsConfigured()
     {
         using var factory = new KioskApplicationFactory();
         using var client = factory.CreateClient();
@@ -86,6 +88,40 @@ public sealed class SystemConfigurationApiTests
             new MachineConfigurationRequest(configuration.PumpDriver, configuration.PinNumberingScheme, configuration.Theme, true, null));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("Netzwerk-PIN", await response.Content.ReadAsStringAsync());
+        Assert.Contains("App-PIN", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task AdminPin_SetupAuthenticatesTheKioskAndProtectsAdministrationEndpoints()
+    {
+        using var factory = new KioskApplicationFactory();
+        using var client = factory.CreateClient();
+
+        var status = await client.GetFromJsonAsync<AdminAccessStatusResponse>("/api/admin-access/status");
+        Assert.False(status?.PinConfigured);
+
+        await SetupAdminPinAsync(client);
+
+        var configured = await client.GetFromJsonAsync<AdminAccessStatusResponse>("/api/admin-access/status");
+        Assert.True(configured?.PinConfigured);
+        Assert.True(configured?.IsAuthenticated);
+
+        var logout = await client.PostAsync("/api/admin-access/logout", null);
+        logout.EnsureSuccessStatusCode();
+        var locked = await client.GetFromJsonAsync<AdminAccessStatusResponse>("/api/admin-access/status");
+        Assert.False(locked?.IsAuthenticated);
+
+        var denied = await factory.Server.SendAsync(context =>
+        {
+            context.Request.Method = HttpMethods.Post;
+            context.Request.Path = "/api/cocktails";
+        });
+        Assert.Equal(StatusCodes.Status401Unauthorized, denied.Response.StatusCode);
+    }
+
+    private static async Task SetupAdminPinAsync(HttpClient client)
+    {
+        var response = await client.PostAsJsonAsync("/api/admin-access/setup", new NetworkPinRequest("1234"));
+        response.EnsureSuccessStatusCode();
     }
 }

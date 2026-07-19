@@ -96,6 +96,13 @@ app.Use(async (context, next) =>
         return;
     }
 
+    if (IsAdminMutation(context.Request) && !await HasConfiguredAdminPinAsync(context))
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsJsonAsync(new ProblemDetails { Status = StatusCodes.Status401Unauthorized, Title = "App-PIN erforderlich", Detail = "Bitte entsperre zuerst die Einstellungen mit dem App-PIN." });
+        return;
+    }
+
     var path = context.Request.Path;
     if (path == "/" || path == "/index.html" || path == "/app.css" || path == "/app.js")
     {
@@ -126,6 +133,25 @@ await app.RunAsync();
 
 static bool IsPublicNetworkAccessPath(PathString path) =>
     path == "/" || path == "/index.html" || path == "/app.css" || path == "/tokens.css" || path == "/app.js"
-    || path.StartsWithSegments("/assets") || path == "/api/network-access/status" || path == "/api/network-access/authenticate";
+    || path.StartsWithSegments("/assets") || path == "/api/network-access/status" || path == "/api/network-access/authenticate"
+    || path == "/api/admin-access/status" || path == "/api/admin-access/setup" || path == "/api/admin-access/authenticate";
+
+static bool IsAdminMutation(HttpRequest request)
+{
+    if (!request.Path.StartsWithSegments("/api") || HttpMethods.IsGet(request.Method)) return false;
+    var path = request.Path;
+    return path.StartsWithSegments("/api/cocktails") || path.StartsWithSegments("/api/ingredients") || path.StartsWithSegments("/api/pumps")
+        || path.StartsWithSegments("/api/sizes") || path.StartsWithSegments("/api/images") || path.StartsWithSegments("/api/system")
+        || path.StartsWithSegments("/api/cleaning") || path.StartsWithSegments("/api/priming") || path.StartsWithSegments("/api/calibrations")
+        || path == "/api/app-update";
+}
+
+static async Task<bool> HasConfiguredAdminPinAsync(HttpContext context)
+{
+    var sessions = context.RequestServices.GetRequiredService<NetworkAccessSessionService>();
+    if (sessions.IsValid(context.Request.Cookies["CocktailOS.AdminAccess"])) return true;
+    var db = context.RequestServices.GetRequiredService<AppDbContext>();
+    return !await db.MachineConfigurations.AsNoTracking().AnyAsync(configuration => configuration.Id == CocktailOS.Kiosk.Models.MachineConfiguration.SingletonId && !string.IsNullOrWhiteSpace(configuration.NetworkAccessPinHash), context.RequestAborted);
+}
 
 public partial class Program;

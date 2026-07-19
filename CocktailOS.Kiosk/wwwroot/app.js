@@ -13,6 +13,7 @@
         system: null,
         version: '',
         update: null,
+        adminAccess: { pinConfigured: false, isAuthenticated: false },
         activeTab: 'cocktails',
         editing: null,
         cocktailDraft: null,
@@ -85,6 +86,11 @@
             if (networkAccess.theme) applyTheme(networkAccess.theme);
             if (networkAccess.requiresPin && !networkAccess.isAuthenticated) {
                 renderNetworkPinPrompt();
+                return;
+            }
+            state.adminAccess = await api('/api/admin-access/status');
+            if (!state.adminAccess.pinConfigured) {
+                renderAppPinSetup();
                 return;
             }
             await loadAll();
@@ -206,10 +212,61 @@
         pinEntry.focus();
     }
 
-    function openNetworkPinSetupDialog({ onSave, onCancel }) {
+    function renderAppPinSetup() {
+        app.innerHTML = `${headerTemplate()}<main class="network-pin-gate" id="app-main"><section class="network-pin-gate-card"><div class="network-pin-login-copy"><span class="network-pin-gate-icon" aria-hidden="true">${icons.lock}</span><h1>App-PIN einrichten</h1><p>Lege jetzt einen vierstelligen PIN fest. Er schützt die Einstellungen und wird auch für den Netzwerkzugriff verwendet.</p></div></section></main>`;
+        openNetworkPinSetupDialog({
+            title: 'App-PIN einrichten',
+            intro: 'Dieser PIN schützt die Einstellungen und den Netzwerkzugriff.',
+            pinLabel: 'App-PIN',
+            allowCancel: false,
+            onSave: async pin => {
+                try {
+                    await api('/api/admin-access/setup', { method: 'POST', body: { pin } });
+                    await initialize();
+                } catch (error) {
+                    renderFatal(error.message);
+                }
+            }
+        });
+    }
+
+    async function requestAdminAccess() {
+        if (state.adminAccess.isAuthenticated) {
+            location.hash = '#/settings';
+            return;
+        }
+        const layer = createSettingsDialog('network-pin-setup-dialog', { dismissible: true });
+        const body = `<form class="network-pin-setup-form"><div class="network-pin-step"><span class="pin-entry-label">App-PIN</span>${pinEntryMarkup('admin-login-pin', 'App-PIN', 'current-password')}</div><p class="network-pin-error" role="alert" hidden></p></form>`;
+        setSettingsDialogContent(layer, 'Einstellungen entsperren', 'Gib den vierstelligen App-PIN ein.', body, { headingIcon: icons.lock });
+        const form = layer.querySelector('form');
+        const pinEntry = bindPinEntry(form.querySelector('.pin-entry'));
+        const error = form.querySelector('.network-pin-error');
+        let authenticating = false;
+        const authenticate = async () => {
+            const pin = pinEntry.value();
+            if (!/^\d{4}$/.test(pin) || authenticating) return;
+            authenticating = true;
+            try {
+                await api('/api/admin-access/authenticate', { method: 'POST', body: { pin } });
+                state.adminAccess.isAuthenticated = true;
+                dismissSettingsDialog(layer);
+                location.hash = '#/settings';
+            } catch {
+                authenticating = false;
+                pinEntry.clear();
+                pinEntry.focus();
+                error.textContent = 'PIN ist nicht korrekt.';
+                error.hidden = false;
+            }
+        };
+        form.addEventListener('pinchange', () => { error.hidden = true; if (pinEntry.value().length === 4) void authenticate(); });
+        pinEntry.focus();
+    }
+
+    function openNetworkPinSetupDialog({ onSave, onCancel, title = 'Netzwerk-PIN festlegen', intro = 'Lege einen vierstelligen PIN fest. Geräte im Netzwerk brauchen ihn, bevor sie CocktailOS öffnen können.', pinLabel = 'Netzwerk-PIN', allowCancel = true }) {
         const layer = createSettingsDialog('network-pin-setup-dialog', { dismissible: false });
-        const body = `<form class="network-pin-setup-form"><div class="network-pin-step"><span class="network-pin-step-count">Schritt <span data-pin-step-number>1</span> von 2</span><span class="pin-entry-label" data-pin-step-label>PIN festlegen</span>${pinEntryMarkup('network-setup-pin', 'Neuer Netzwerk-PIN', 'new-password')}</div><p class="network-pin-error" role="alert" hidden></p><div class="network-pin-setup-actions"><span>Nach der vierten Ziffer geht es automatisch weiter.</span><button type="button" class="secondary-button network-pin-cancel">Abbrechen</button></div></form>`;
-        setSettingsDialogContent(layer, 'Netzwerk-PIN festlegen', 'Lege einen vierstelligen PIN fest. Geräte im Netzwerk brauchen ihn, bevor sie CocktailOS öffnen können.', body, { showClose: false, headingIcon: icons.lock });
+        const body = `<form class="network-pin-setup-form"><div class="network-pin-step"><span class="network-pin-step-count">Schritt <span data-pin-step-number>1</span> von 2</span><span class="pin-entry-label" data-pin-step-label>PIN festlegen</span>${pinEntryMarkup('network-setup-pin', `Neuer ${pinLabel}`, 'new-password')}</div><p class="network-pin-error" role="alert" hidden></p><div class="network-pin-setup-actions"><span>Nach der vierten Ziffer geht es automatisch weiter.</span>${allowCancel ? '<button type="button" class="secondary-button network-pin-cancel">Abbrechen</button>' : ''}</div></form>`;
+        setSettingsDialogContent(layer, title, intro, body, { showClose: false, headingIcon: icons.lock });
         const form = layer.querySelector('.network-pin-setup-form');
         const error = form.querySelector('.network-pin-error');
         const pinEntry = bindPinEntry(form.querySelector('#network-setup-pin'));
@@ -227,7 +284,7 @@
                 pinEntry.clear();
                 form.querySelector('[data-pin-step-number]').textContent = '2';
                 form.querySelector('[data-pin-step-label]').textContent = 'PIN wiederholen';
-                form.querySelector('.pin-entry').setAttribute('aria-label', 'Netzwerk-PIN wiederholen');
+                form.querySelector('.pin-entry').setAttribute('aria-label', `${pinLabel} wiederholen`);
                 isAdvancing = false;
                 pinEntry.focus();
                 return;
@@ -240,7 +297,7 @@
                 pinEntry.clear();
                 form.querySelector('[data-pin-step-number]').textContent = '1';
                 form.querySelector('[data-pin-step-label]').textContent = 'PIN festlegen';
-                form.querySelector('.pin-entry').setAttribute('aria-label', 'Neuer Netzwerk-PIN');
+                form.querySelector('.pin-entry').setAttribute('aria-label', `Neuer ${pinLabel}`);
                 isAdvancing = false;
                 pinEntry.focus();
                 return;
@@ -249,7 +306,7 @@
             dismissSettingsDialog(layer);
         };
         form.addEventListener('pinchange', advance);
-        form.querySelector('.network-pin-cancel').addEventListener('click', () => {
+        form.querySelector('.network-pin-cancel')?.addEventListener('click', () => {
             dismissSettingsDialog(layer);
             onCancel?.();
         });
@@ -275,8 +332,27 @@
 
     function renderRoute() {
         clearTimers();
-        if (location.hash.startsWith('#/settings')) renderSettings();
-        else renderHome();
+        if (location.hash.startsWith('#/settings')) {
+            if (!state.adminAccess.isAuthenticated) {
+                renderHome();
+                void requestAdminAccess();
+                return;
+            }
+            renderSettings();
+        }
+        else {
+            if (state.adminAccess.isAuthenticated) void lockAdminAccess();
+            renderHome();
+        }
+    }
+
+    async function lockAdminAccess() {
+        state.adminAccess.isAuthenticated = false;
+        try {
+            await api('/api/admin-access/logout', { method: 'POST' });
+        } catch {
+            // Die Oberfläche bleibt trotzdem gesperrt; beim nächsten Öffnen wird erneut geprüft.
+        }
     }
 
     function renderLoading() {
@@ -354,7 +430,7 @@
         app.innerHTML = `${headerTemplate('', '', true)}<main class="home-main" id="app-main"><header class="home-heading"><div><h1>Cocktail wählen</h1><p>Rezept antippen, Größe festlegen, mixen.</p></div></header><div class="cocktail-scroller" aria-label="Cocktails">${content}</div></main>`;
 
         app.querySelectorAll('[data-cocktail-id]').forEach(button => button.addEventListener('click', () => openCocktail(Number(button.dataset.cocktailId))));
-        app.querySelector('.settings-button').addEventListener('click', () => { location.hash = '#/settings'; });
+        app.querySelector('.settings-button').addEventListener('click', () => void requestAdminAccess());
         animateCards();
     }
 
@@ -1161,25 +1237,11 @@
         const config = state.system;
         const update = state.update;
         const updateContent = update?.isAvailable
-            ? `<span class="system-update-available">v${escapeHtml(update.latestVersion)} ist verfügbar</span><button type="button" class="primary-button system-update-button" data-app-update>${icons.download}<span>Installieren</span></button><button type="button" class="secondary-button system-update-button" data-app-update-check>Nach Updates suchen</button>`
+            ? `<span class="system-update-available">v${escapeHtml(update.latestVersion)} ist verfügbar</span><button type="button" class="primary-button system-update-button" data-app-update>${icons.download}<span>Installieren</span></button>`
             : `<span class="system-update-current">${update ? 'Auf dem neuesten Stand' : 'Update-Status nicht verfügbar'}</span><button type="button" class="secondary-button system-update-button" data-app-update-check>Nach Updates suchen</button>`;
-        main.innerHTML = `<section class="settings-card system-hero"><header class="system-page-heading"><span class="system-heading-icon" aria-hidden="true">${icons.settings}</span><div><h1>System</h1><p>Hardware, Netzwerkzugriff und Software dieser Mixstation konfigurieren.</p></div></header><form id="system-form"><div class="system-config-grid"><section class="system-section system-hardware-section" aria-labelledby="system-hardware-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.raspberryPi}</span><div><h2 id="system-hardware-title">Hardware</h2><p>Lege fest, wie CocktailOS die angeschlossenen Pumpen ansteuert.</p></div></header><div class="system-choice-grid"><fieldset class="system-choice-group"><legend>Pumpentreiber</legend><label class="option-card system-option-card"><input type="radio" name="pumpDriver" value="Dummy" ${config.pumpDriver === 'Dummy' ? 'checked' : ''}><strong>Dummy</strong><span>Sicher testen, ohne GPIO-Ausgänge zu schalten.</span></label><label class="option-card system-option-card"><input type="radio" name="pumpDriver" value="Gpio" ${config.pumpDriver === 'Gpio' ? 'checked' : ''}><strong>Raspberry Pi GPIO</strong><span>Steuert reale Relais über System.Device.Gpio.</span></label></fieldset><fieldset class="system-choice-group"><legend>Pin-Nummerierung</legend><label class="option-card system-option-card"><input type="radio" name="pinNumberingScheme" value="Logical" ${config.pinNumberingScheme === 'Logical' ? 'checked' : ''}><strong>Logical / BCM</strong><span>GPIO-Nummern, beispielsweise GPIO17.</span></label><label class="option-card system-option-card"><input type="radio" name="pinNumberingScheme" value="Board" ${config.pinNumberingScheme === 'Board' ? 'checked' : ''}><strong>Board / physisch</strong><span>Positionen 1 bis 40 auf dem Raspberry-Pi-Header.</span></label></fieldset></div><p class="system-inline-note">Die Relaispolarität wird direkt für jede Pumpe festgelegt.</p></section><section class="system-section system-network-section" aria-labelledby="system-network-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.lock}</span><div><h2 id="system-network-title">Netzwerkzugriff</h2><p>Steuere CocktailOS von einem anderen Gerät im lokalen Netzwerk.</p></div></header><label class="option-card network-access-option system-network-toggle"><input type="checkbox" name="networkAccessEnabled" ${config.networkAccessEnabled ? 'checked' : ''}><span class="network-switch" aria-hidden="true"><span></span></span><strong>Fernzugriff aktivieren</strong><span>Der Zugang ist durch einen vierstelligen PIN geschützt.</span></label><div class="network-access-note"><span>Nur in vertrauenswürdigen Netzwerken aktivieren.</span><button type="button" class="text-button network-pin-change" ${config.networkAccessEnabled ? '' : 'hidden'}>PIN ändern</button></div></section><section class="system-section system-update-section" aria-labelledby="application-update-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.download}</span><div><h2 id="application-update-title">Software</h2><p>Installierte Version und verfügbare Aktualisierungen.</p></div></header><div class="application-update-card"><div><span class="system-meta-label">Installierte Version</span><strong>v${escapeHtml(state.version || '–')}</strong></div><div class="application-update-status">${updateContent}</div></div></section></div><aside class="system-safety-note"><span aria-hidden="true">!</span><p>Bei active LOW bleibt der Ausgang im Ruhezustand HIGH und schaltet zum Pumpen auf LOW.</p></aside><footer class="system-form-footer"><p>Änderungen werden erst nach dem Speichern übernommen.</p><button class="primary-button" type="submit">Hardwarekonfiguration speichern</button></footer></form></section>`;
+        main.innerHTML = `<section class="settings-card system-hero"><header class="system-page-heading"><span class="system-heading-icon" aria-hidden="true">${icons.settings}</span><div><h1>System</h1><p>Hardware, Netzwerkzugriff und Software dieser Mixstation konfigurieren.</p></div></header><form id="system-form"><div class="system-config-grid"><section class="system-section system-hardware-section" aria-labelledby="system-hardware-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.raspberryPi}</span><div><h2 id="system-hardware-title">Hardware</h2><p>Lege fest, wie CocktailOS die angeschlossenen Pumpen ansteuert.</p></div></header><div class="system-choice-grid"><fieldset class="system-choice-group"><legend>Pumpentreiber</legend><label class="option-card system-option-card"><input type="radio" name="pumpDriver" value="Dummy" ${config.pumpDriver === 'Dummy' ? 'checked' : ''}><strong>Dummy</strong><span>Sicher testen, ohne GPIO-Ausgänge zu schalten.</span></label><label class="option-card system-option-card"><input type="radio" name="pumpDriver" value="Gpio" ${config.pumpDriver === 'Gpio' ? 'checked' : ''}><strong>Raspberry Pi GPIO</strong><span>Steuert reale Relais über System.Device.Gpio.</span></label></fieldset><fieldset class="system-choice-group"><legend>Pin-Nummerierung</legend><label class="option-card system-option-card"><input type="radio" name="pinNumberingScheme" value="Logical" ${config.pinNumberingScheme === 'Logical' ? 'checked' : ''}><strong>Logical / BCM</strong><span>GPIO-Nummern, beispielsweise GPIO17.</span></label><label class="option-card system-option-card"><input type="radio" name="pinNumberingScheme" value="Board" ${config.pinNumberingScheme === 'Board' ? 'checked' : ''}><strong>Board / physisch</strong><span>Positionen 1 bis 40 auf dem Raspberry-Pi-Header.</span></label></fieldset></div><p class="system-inline-note">Die Relaispolarität wird direkt für jede Pumpe festgelegt.</p></section><section class="system-section system-network-section" aria-labelledby="system-network-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.lock}</span><div><h2 id="system-network-title">Netzwerkzugriff</h2><p>Steuere CocktailOS von einem anderen Gerät im lokalen Netzwerk.</p></div></header><label class="option-card network-access-option system-network-toggle"><input type="checkbox" name="networkAccessEnabled" ${config.networkAccessEnabled ? 'checked' : ''}><span class="network-switch" aria-hidden="true"><span></span></span><strong>Fernzugriff aktivieren</strong><span>Der Zugang ist durch deinen vierstelligen App-PIN geschützt.</span></label><div class="network-access-note"><span>Nur in vertrauenswürdigen Netzwerken aktivieren.</span></div></section><section class="system-section system-update-section" aria-labelledby="application-update-title"><header class="system-section-heading"><span class="system-section-icon" aria-hidden="true">${icons.download}</span><div><h2 id="application-update-title">Software</h2><p>Installierte Version und verfügbare Aktualisierungen.</p></div></header><div class="application-update-card"><div><span class="system-meta-label">Installierte Version</span><strong>v${escapeHtml(state.version || '–')}</strong></div><div class="application-update-status">${updateContent}</div></div></section></div><aside class="system-safety-note"><span aria-hidden="true">!</span><p>Bei active LOW bleibt der Ausgang im Ruhezustand HIGH und schaltet zum Pumpen auf LOW.</p></aside><footer class="system-form-footer"><p>Änderungen werden erst nach dem Speichern übernommen.</p><button class="primary-button" type="submit">Hardwarekonfiguration speichern</button></footer></form></section>`;
         const networkToggle = main.querySelector('[name="networkAccessEnabled"]');
         const form = main.querySelector('#system-form');
-        const pinChangeButton = main.querySelector('.network-pin-change');
-        const setNetworkPin = pin => { form.dataset.networkAccessPin = pin; pinChangeButton.hidden = !networkToggle.checked; };
-        networkToggle.addEventListener('change', () => {
-            if (!networkToggle.checked) {
-                form.dataset.networkAccessPin = '';
-                pinChangeButton.hidden = true;
-                return;
-            }
-            openNetworkPinSetupDialog({
-                onSave: setNetworkPin,
-                onCancel: () => { networkToggle.checked = false; pinChangeButton.hidden = true; }
-            });
-        });
-        pinChangeButton.addEventListener('click', () => openNetworkPinSetupDialog({ onSave: setNetworkPin }));
         const bindUpdateControls = () => {
             main.querySelector('[data-app-update]')?.addEventListener('click', openApplicationUpdateDialog);
             main.querySelector('[data-app-update-check]')?.addEventListener('click', async event => {
@@ -1189,7 +1251,7 @@
                 try {
                     state.update = await api('/api/app-update');
                     const refreshedContent = state.update?.isAvailable
-                        ? `<span class="system-update-available">v${escapeHtml(state.update.latestVersion)} ist verfügbar</span><button type="button" class="primary-button system-update-button" data-app-update>${icons.download}<span>Installieren</span></button><button type="button" class="secondary-button system-update-button" data-app-update-check>Nach Updates suchen</button>`
+                        ? `<span class="system-update-available">v${escapeHtml(state.update.latestVersion)} ist verfügbar</span><button type="button" class="primary-button system-update-button" data-app-update>${icons.download}<span>Installieren</span></button>`
                         : `<span class="system-update-current">Auf dem neuesten Stand</span><button type="button" class="secondary-button system-update-button" data-app-update-check>Nach Updates suchen</button>`;
                     main.querySelector('.application-update-status').innerHTML = refreshedContent;
                     bindUpdateControls();
@@ -1210,9 +1272,7 @@
             submit.classList.add('is-loading');
             submit.textContent = 'Wird gespeichert …';
             try {
-                const pin = form.dataset.networkAccessPin || '';
-                if (form.elements.networkAccessEnabled.checked && !config.networkAccessPinConfigured && !pin) throw new Error('Lege zuerst einen vierstelligen Netzwerk-PIN fest.');
-                state.system = await api('/api/system', { method: 'PUT', body: { pumpDriver: form.elements.pumpDriver.value, pinNumberingScheme: form.elements.pinNumberingScheme.value, theme: state.system.theme, networkAccessEnabled: form.elements.networkAccessEnabled.checked, networkAccessPin: pin || null } });
+                state.system = await api('/api/system', { method: 'PUT', body: { pumpDriver: form.elements.pumpDriver.value, pinNumberingScheme: form.elements.pinNumberingScheme.value, theme: state.system.theme, networkAccessEnabled: form.elements.networkAccessEnabled.checked, networkAccessPin: null } });
                 showToast(state.system.networkAccessEnabled ? 'Hardwarekonfiguration gespeichert. Netzwerkzugriff ist aktiv.' : 'Hardwarekonfiguration gespeichert. Netzwerkzugriff ist deaktiviert.');
                 renderActiveSettingsTab();
             } catch (error) {

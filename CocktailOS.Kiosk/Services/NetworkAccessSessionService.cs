@@ -22,4 +22,9 @@ public sealed class NetworkAccessSessionService
         _sessions.TryRemove(token, out _);
         return false;
     }
+
+    public void Revoke(string? token)
+    {
+        if (!string.IsNullOrWhiteSpace(token)) _sessions.TryRemove(token, out _);
+    }
 }
